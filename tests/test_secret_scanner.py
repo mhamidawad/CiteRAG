@@ -25,6 +25,15 @@ class SecretScannerTests(unittest.TestCase):
         brand="moe"+"-opencode-rag"
         self.assertFalse(self.mod.issues_for_line("NOTICE","Derived from "+brand))
         self.assertTrue(self.mod.issues_for_line("docs/sample.md","Derived from "+brand))
+    def test_exact_runner_allowlist_does_not_hide_other_references(self):
+        runner="    runs-on: "+"ub"+"untu-24.04"
+        self.assertFalse(self.mod.issues_for_line(".github/workflows/tests.yml",runner))
+        self.assertTrue(self.mod.issues_for_line("docs/sample.md",runner))
+        self.assertTrue(self.mod.issues_for_line(".github/workflows/tests.yml",runner+" # unexpected"))
+
+    def test_history_audit_all_reachable_commits(self):
+        self.assertEqual(self.mod.scan_history(),0)
+
     def test_safe_defaults(self):
         self.assertFalse(self.mod.issues_for_line(".env.example","CITERAG_OMNIROUTE_API_KEY="))
         self.assertFalse(self.mod.issues_for_line("citerag/answer.py",'api_key=os.getenv("CITERAG_OMNIROUTE_API_KEY","")'))
