@@ -80,7 +80,14 @@ async def home(request):
 
 
 async def health(request):
-    return JSONResponse({"status": "ok", "model": MODEL, "generation": "OmniRoute → local Ollama", "retrieval": "LanceDB + MiniLM + keyword retrieval", "native_opencode":native_status(), "busy": _generation.locked()})
+    root=Path(__file__).resolve().parents[1]
+    index_ready=(root/"data/lancedb/documents.lance").is_dir() and (root/"data/keyword.sqlite3").is_file()
+    generation_configured=bool(MODEL and os.getenv("CITERAG_OMNIROUTE_API_KEY") and os.getenv("CITERAG_OMNIROUTE_URL"))
+    return JSONResponse({"status":"ok","status_scope":"HTTP process liveness only",
+                         "retrieval_index":"present" if index_ready else "uninitialized",
+                         "generation":"configured_not_verified" if generation_configured else "not_configured",
+                         "model":MODEL if generation_configured else None,
+                         "native_opencode":native_status(),"busy":_generation.locked()})
 
 
 async def context_status(request):
