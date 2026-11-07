@@ -10,6 +10,10 @@ from citerag.freshness import prepare_context
 
 
 def answer(question):
+    runner=ROOT/'tasks/verify-native.py'
+    if not runner.is_file():
+        return {'status':'failed','error':'NativeAdapterUnavailable',
+                'detail':'The verified OpenCode runner is not installed in this standalone CiteRAG distribution.'}
     fresh=prepare_context()
     if fresh['status']!='completed':return {'status':'failed','error':'ContextNotFresh','detail':fresh.get('reason','Context refresh did not complete; no generation sent.')}
     run_id=uuid.uuid4().hex

@@ -6,9 +6,14 @@ from citerag.native_result import citation_and_claim_checks,ABSTENTION
 p=ROOT/"docs/sample.md"
 orig=p.read_bytes()
 try:
+    first=ingest()
+    print("INITIAL_INDEX",json.dumps({k:first[k] for k in ("chunks","new_embeddings","reused_embeddings","removed_chunks")}))
+    # A fresh or changed corpus is expected to create embeddings on the first pass.
+    # Only the *second* pass can prove unchanged document reuse.
     one=ingest()
     print("REINDEX",json.dumps({k:one[k] for k in ("chunks","new_embeddings","reused_embeddings","removed_chunks")}))
     assert one["new_embeddings"]==0 and one["reused_embeddings"]==one["chunks"]
+    assert one["removed_chunks"]==0 and one["chunks"]==first["chunks"]
     rows=search("OpenCode coding agents",limit=3)
     print("SEARCH",len(rows),[r["source"] for r in rows])
     assert rows and all("source" in r and "id" in r for r in rows)
