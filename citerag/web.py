@@ -13,7 +13,8 @@ from citerag.semantic import search, model
 from citerag.answer import answer, MODEL
 from citerag.native import answer as native_answer
 from citerag.freshness import prepare_context
-from citerag.native_result import ABSTENTION,runtime_fingerprint
+from citerag.native_result import ABSTENTION,runtime_fingerprint,citation_and_claim_checks
+from citerag.quotes import verbatim_answer
 
 # Stable public adapter identifiers. Configuration is server-side only; no secret fields.
 ADAPTERS = {
@@ -40,7 +41,14 @@ def run_job(job_id, question, retrieval_only, use_native=False):
             if fresh['status']!='completed':raise RuntimeError('Context refresh failed; no stale answer was generated.')
             rows=search(question,1)
         if retrieval_only:
-            result = {"status": "completed" if rows else "insufficient_evidence", "answer": "" if rows else ABSTENTION, "sources": [r["source"] for r in rows], "mode": "retrieval_only"}
+            if rows:
+                cited_answer=verbatim_answer(question,rows[0])
+                cited,supported=citation_and_claim_checks(cited_answer,rows)
+                if not (cited and supported):
+                    raise ValueError("Retrieved citation or claim validation failed")
+                result={"status":"completed","answer":cited_answer,"sources":[r["source"] for r in rows],"mode":"retrieval_only","citations_verified":True,"claims_supported":True}
+            else:
+                result={"status":"insufficient_evidence","answer":ABSTENTION,"sources":[],"mode":"retrieval_only"}
         elif use_native:
             result=native_answer(question)
         else:
