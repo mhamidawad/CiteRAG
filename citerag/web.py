@@ -1,4 +1,5 @@
 """Private web interface for the bounded local retrieval/generation pipeline."""
+import os
 import threading
 import secrets
 import time
@@ -146,4 +147,4 @@ app = Starlette(routes=[Route("/", home), Route("/api/health", health), Route("/
 if __name__ == "__main__":
     import uvicorn
     model()
-    uvicorn.run(app, host="127.0.0.1", port=18762, access_log=False)
+    uvicorn.run(app, host=os.getenv("CITERAG_WEB_HOST","127.0.0.1"), port=int(os.getenv("CITERAG_WEB_PORT","18762")), access_log=False)
