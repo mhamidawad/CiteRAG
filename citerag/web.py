@@ -1,4 +1,5 @@
 """Private web interface for the bounded local retrieval/generation pipeline."""
+import os
 import threading
 import secrets
 import time
@@ -79,7 +80,14 @@ async def home(request):
 
 
 async def health(request):
-    return JSONResponse({"status": "ok", "model": MODEL, "generation": "OmniRoute → local Ollama", "retrieval": "LanceDB + MiniLM + keyword retrieval", "native_opencode":native_status(), "busy": _generation.locked()})
+    root=Path(__file__).resolve().parents[1]
+    index_ready=(root/"data/lancedb/documents.lance").is_dir() and (root/"data/keyword.sqlite3").is_file()
+    generation_configured=bool(MODEL and os.getenv("CITERAG_OMNIROUTE_API_KEY") and os.getenv("CITERAG_OMNIROUTE_URL"))
+    return JSONResponse({"status":"ok","status_scope":"HTTP process liveness only",
+                         "retrieval_index":"present" if index_ready else "uninitialized",
+                         "generation":"configured_not_verified" if generation_configured else "not_configured",
+                         "model":MODEL if generation_configured else None,
+                         "native_opencode":native_status(),"busy":_generation.locked()})
 
 
 async def context_status(request):
@@ -146,4 +154,4 @@ app = Starlette(routes=[Route("/", home), Route("/api/health", health), Route("/
 if __name__ == "__main__":
     import uvicorn
     model()
-    uvicorn.run(app, host="127.0.0.1", port=18762, access_log=False)
+    uvicorn.run(app, host=os.getenv("CITERAG_WEB_HOST","127.0.0.1"), port=int(os.getenv("CITERAG_WEB_PORT","18762")), access_log=False)
