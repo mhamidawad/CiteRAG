@@ -206,9 +206,15 @@ def refresh():
         try:fcntl.flock(handle,fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError:return {'status':'deferred','reason':'Another context refresh is active'}
         try:
-            config=json.loads((ROOT/'context-sources.json').read_text())
-            summary=sync(config,apply=True)
-            if summary['conflicts']:return {'status':'failed','reason':'User-edited context files were preserved','conflicts':summary['conflicts']}
+            sources=ROOT/'context-sources.json'
+            if sources.exists():
+                config=json.loads(sources.read_text())
+                summary=sync(config,apply=True)
+                if summary['conflicts']:return {'status':'failed','reason':'User-edited context files were preserved','conflicts':summary['conflicts']}
+            else:
+                # Standalone mode: only approved local docs/ are indexed.
+                # Ingest verifies the source set; no missing external exporter is assumed fresh.
+                summary={'mode':'standalone-docs','selected_sessions':0}
             result={'status':'completed','sync':summary,'index':ingest(),'updated_at':datetime.now(timezone.utc).isoformat()}
             atomic_write(ROOT/'data/context-status.json',json.dumps(result,indent=2)+'\n')
             return result
