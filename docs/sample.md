@@ -1,0 +1,2 @@
+# OpenCode RAG Example
+OpenCode coding agents use source-cited retrieval.
