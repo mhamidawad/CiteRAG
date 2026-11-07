@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed twenty-slot CircleCI preflight. NOT autonomous AI inference."""
+"""Fail-closed thirty-slot CircleCI preflight. NOT autonomous AI inference."""
 import argparse
 import json
 import os
@@ -9,22 +9,22 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ROLES = ("planner", "retrieval", "tests", "security", "review")
-# Five job roles, four independent shards each. No model calls, credentials or
+# Five job roles, six independent shards each. No model calls, credentials or
 # repository writes. The controller is still OpenCode on the Oracle VM.
 SHARDS = {
-    "planner": ("README.md", "CONTRIBUTING.md", "docs/architecture.md", ".circleci/config.yml"),
-    "retrieval": ("citerag/semantic.py", "citerag/quotes.py", "citerag/context.py", "citerag/server.py"),
-    "tests": ("tests/test_retrieval.py", "tests/test_web.py", "tests/test_adapters.py", "tests/test_secret_scanner.py"),
-    "security": ("tasks/scan-secrets.py", "SECURITY.md", "citerag/native_result.py", "citerag/freshness.py"),
-    "review": ("Dockerfile", "compose.yaml", "docs/private-preview-acceptance.md", "requirements.lock.txt"),
+    "planner": ("README.md", "CONTRIBUTING.md", "docs/architecture.md", ".circleci/config.yml", ".github/pull_request_template.md", "docs/go-public-checklist.md"),
+    "retrieval": ("citerag/semantic.py", "citerag/quotes.py", "citerag/context.py", "citerag/server.py", "citerag/answer.py", "citerag/cli.py"),
+    "tests": ("tests/test_retrieval.py", "tests/test_web.py", "tests/test_adapters.py", "tests/test_secret_scanner.py", "tests/test_dashboard_contract.py", "tests/test_deployment_preflight.py"),
+    "security": ("tasks/scan-secrets.py", "SECURITY.md", "citerag/native_result.py", "citerag/freshness.py", "tests/test_native_result.py", "docs/rollback.md"),
+    "review": ("Dockerfile", "compose.yaml", "docs/private-preview-acceptance.md", "requirements.lock.txt", "LICENSE", "docs/docker.md"),
 }
-TOTAL = len(ROLES) * 4
+TOTAL = len(ROLES) * 6
 
 def slot(index, total):
     if total != TOTAL or index not in range(TOTAL):
-        raise ValueError("Expected exactly 20 CircleCI nodes numbered 0–19")
-    role = ROLES[index // 4]
-    shard = index % 4
+        raise ValueError("Expected exactly 30 CircleCI nodes numbered 0–29")
+    role = ROLES[index // 6]
+    shard = index % 6
     return role, shard, SHARDS[role][shard]
 
 def check(index, total):
