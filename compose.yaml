@@ -1,0 +1,61 @@
+# Development staging template only. Initial resource limits, NOT MEASURED.
+# Requires a privately built GHCR image, populated local MiniLM cache and review.
+name: citerag
+x-hardening: &hardening
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  pids_limit: 128
+  tmpfs:
+    - /tmp:size=64m,mode=1777
+  stop_grace_period: 10s
+  restart: "no"
+x-storage: &storage
+  - citerag-data:/app/data
+  - citerag-models:/app/data/models
+  - ./docs:/app/docs:ro
+  - ./config:/app/config:ro
+services:
+  mcp:
+    <<: *hardening
+    image: ghcr.io/mhamidawad/citerag:${CITERAG_IMAGE_TAG:?set CITERAG_IMAGE_TAG to an approved private image tag}
+    command: ["python","-m","citerag.server"]
+    environment:
+      CITERAG_MCP_HOST: 0.0.0.0
+      CITERAG_MCP_PORT: "18761"
+      CITERAG_OFFLINE: "1"
+      CITERAG_MODEL_CACHE_DIR: /app/data/models
+    ports:
+      - "127.0.0.1:28761:18761"
+    volumes: *storage
+    mem_limit: 3g
+    cpus: "2.0"
+    healthcheck:
+      test: ["CMD","python","-c","import socket; s=socket.create_connection(('127.0.0.1',18761),2); s.close()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+  web:
+    <<: *hardening
+    image: ghcr.io/mhamidawad/citerag:${CITERAG_IMAGE_TAG:?set CITERAG_IMAGE_TAG to an approved private image tag}
+    command: ["python","-m","citerag.web"]
+    environment:
+      CITERAG_WEB_HOST: 0.0.0.0
+      CITERAG_WEB_PORT: "18762"
+      CITERAG_OFFLINE: "1"
+      CITERAG_MODEL_CACHE_DIR: /app/data/models
+    ports:
+      - "127.0.0.1:28762:18762"
+    volumes: *storage
+    mem_limit: 3g
+    cpus: "2.0"
+    healthcheck:
+      test: ["CMD","python","-c","import os, urllib.request; urllib.request.urlopen('http://localhost:'+os.environ.get('CITERAG_WEB_PORT','18762')+'/api/health',timeout=3).close()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+volumes:
+  citerag-data:
+  citerag-models:

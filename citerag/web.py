@@ -1,4 +1,5 @@
 """Private web interface for the bounded local retrieval/generation pipeline."""
+import os
 import threading
 import secrets
 import time
@@ -13,7 +14,19 @@ from citerag.semantic import search, model
 from citerag.answer import answer, MODEL
 from citerag.native import answer as native_answer
 from citerag.freshness import prepare_context
-from citerag.native_result import ABSTENTION,runtime_fingerprint
+from citerag.native_result import ABSTENTION,runtime_fingerprint,citation_and_claim_checks
+from citerag.quotes import verbatim_answer
+
+# Stable public adapter identifiers. Configuration is server-side only; no secret fields.
+ADAPTERS = {
+    "opencode": {"name": "opencode", "schema": {"type": "object", "additionalProperties": False}, "generation": True},
+    "omniroute": {"name": "omniroute", "schema": {"type": "object", "additionalProperties": False}, "generation": True},
+    "retrieval-only": {"name": "retrieval-only", "schema": {"type": "object", "additionalProperties": False}, "generation": False},
+}
+
+async def adapters(request):
+    return JSONResponse({"adapters": list(ADAPTERS.values())})
+
 
 _jobs = {}
 _guard = threading.Lock()
@@ -29,7 +42,14 @@ def run_job(job_id, question, retrieval_only, use_native=False):
             if fresh['status']!='completed':raise RuntimeError('Context refresh failed; no stale answer was generated.')
             rows=search(question,1)
         if retrieval_only:
-            result = {"status": "completed" if rows else "insufficient_evidence", "answer": "" if rows else ABSTENTION, "sources": [r["source"] for r in rows], "mode": "retrieval_only"}
+            if rows:
+                cited_answer=verbatim_answer(question,rows[0])
+                cited,supported=citation_and_claim_checks(cited_answer,rows)
+                if not (cited and supported):
+                    raise ValueError("Retrieved citation or claim validation failed")
+                result={"status":"completed","answer":cited_answer,"sources":[r["source"] for r in rows],"mode":"retrieval_only","citations_verified":True,"claims_supported":True}
+            else:
+                result={"status":"insufficient_evidence","answer":ABSTENTION,"sources":[],"mode":"retrieval_only"}
         elif use_native:
             result=native_answer(question)
         else:
@@ -38,7 +58,7 @@ def run_job(job_id, question, retrieval_only, use_native=False):
         result["elapsed_ms"] = round((time.monotonic() - started) * 1000)
         result["state"] = "completed" if result["status"] in {"completed","insufficient_evidence"} else "failed"
     except Exception as exc:
-        result = {"state": "failed", "status": "failed", "error": type(exc).__name__, "detail": str(exc)}
+        result = {"state": "failed", "status": "failed", "error": type(exc).__name__}
     finally:
         _generation.release()
     with _guard:
@@ -60,7 +80,14 @@ async def home(request):
 
 
 async def health(request):
-    return JSONResponse({"status": "ok", "model": MODEL, "generation": "OmniRoute → local Ollama", "retrieval": "LanceDB + MiniLM + keyword retrieval", "native_opencode":native_status(), "busy": _generation.locked()})
+    root=Path(__file__).resolve().parents[1]
+    index_ready=(root/"data/lancedb/documents.lance").is_dir() and (root/"data/keyword.sqlite3").is_file()
+    generation_configured=bool(MODEL and os.getenv("CITERAG_OMNIROUTE_API_KEY") and os.getenv("CITERAG_OMNIROUTE_URL"))
+    return JSONResponse({"status":"ok","status_scope":"HTTP process liveness only",
+                         "retrieval_index":"present" if index_ready else "uninitialized",
+                         "generation":"configured_not_verified" if generation_configured else "not_configured",
+                         "model":MODEL if generation_configured else None,
+                         "native_opencode":native_status(),"busy":_generation.locked()})
 
 
 async def context_status(request):
@@ -87,6 +114,21 @@ async def ask(request):
     question = data.get("question") if isinstance(data, dict) else None
     if not isinstance(question, str) or not 1 <= len(question.strip()) <= 4000:
         return JSONResponse({"error": "Enter a question between 1 and 4000 characters."}, status_code=400)
+    # Validate adapter and config before acquiring the lock or refreshing any sources.
+    explicit_adapter=data.get("adapter")
+    adapter_config=data.get("adapter_config",{})
+    if explicit_adapter is not None:
+        if not isinstance(explicit_adapter,str) or explicit_adapter not in ADAPTERS:
+            return JSONResponse({"error":"Unknown adapter"},status_code=400)
+        if not isinstance(adapter_config,dict) or adapter_config:
+            return JSONResponse({"error":"Invalid adapter config"},status_code=400)
+        selected_native=explicit_adapter=="opencode"
+        selected_retrieval=explicit_adapter=="retrieval-only"
+    else:
+        if "adapter_config" in data and (not isinstance(adapter_config,dict) or adapter_config):
+            return JSONResponse({"error":"Invalid adapter config"},status_code=400)
+        selected_native=data.get("use_native") is True
+        selected_retrieval=data.get("retrieval_only") is True
     if not _generation.acquire(blocking=False):
         return JSONResponse({"error": "A request is already running. Wait for it to finish."}, status_code=409)
     job_id = secrets.token_urlsafe(18)
@@ -98,7 +140,7 @@ async def ask(request):
                     break
         _jobs[job_id] = {"state": "running"}
     return JSONResponse({"job_id": job_id, "state": "running"}, status_code=202,
-                        background=BackgroundTask(run_job, job_id, question.strip(), data.get("retrieval_only") is True, data.get("use_native") is True))
+                        background=BackgroundTask(run_job, job_id, question.strip(), selected_retrieval, selected_native))
 
 
 async def job(request):
@@ -107,9 +149,9 @@ async def job(request):
     return JSONResponse(result if result is not None else {"error": "Unknown request"}, status_code=200 if result is not None else 404)
 
 
-app = Starlette(routes=[Route("/", home), Route("/api/health", health), Route("/api/context", context_status), Route("/api/ask", ask, methods=["POST"]), Route("/api/jobs/{job_id}", job)])
+app = Starlette(routes=[Route("/", home), Route("/api/health", health), Route("/api/adapters", adapters), Route("/api/context", context_status), Route("/api/ask", ask, methods=["POST"]), Route("/api/jobs/{job_id}", job)])
 
 if __name__ == "__main__":
     import uvicorn
     model()
-    uvicorn.run(app, host="127.0.0.1", port=18762, access_log=False)
+    uvicorn.run(app, host=os.getenv("CITERAG_WEB_HOST","127.0.0.1"), port=int(os.getenv("CITERAG_WEB_PORT","18762")), access_log=False)
