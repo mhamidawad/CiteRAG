@@ -120,7 +120,7 @@ def file_documents(config, report):
         if Path(name).name != name or path.is_symlink() or not path.is_file() or path.stat().st_size > 256000:
             report["skipped_sources"].append(location)
             continue
-        yield from sanitized_file(path, "project/" + name, "rag-team", report)
+        yield from sanitized_file(path, "project/" + name, "default", report)
 
 
 def sanitized_file(path, output, project, report):
