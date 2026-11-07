@@ -14,7 +14,7 @@ def check_writer_access(owner=None,path=None):
     expires=state.get('expires_at')
     try:active=not expires or datetime.fromisoformat(expires.replace('Z','+00:00'))>datetime.now(timezone.utc)
     except (ValueError,TypeError):active=True
-    if active and (owner or os.environ.get('MOE_RAG_WRITER_OWNER'))!=state.get('owner'):
+    if active and (owner or os.environ.get('CITERAG_WRITER_OWNER'))!=state.get('owner'):
         raise InferenceBusy('Project writer lease is active; retrieval refresh and generation are deferred.')
 
 

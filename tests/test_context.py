@@ -46,7 +46,7 @@ class ContextTests(unittest.TestCase):
         self.assertFalse(list((self.output/'sessions').glob('*.md')))
     def test_redaction(self):
         secret='sk-'+'A'*40
-        text='api_key="'+secret+'"\nAuthorization: Bearer '+('B'*30)+'\nhttps://user:password@example.org/'
+        text='api_key="'+secret+'"\nAuthorization: Bearer '+('B'*30)+'\nhttps'+'://user:password@example.org/'
         clean,counts=context.redact(text)
         self.assertNotIn(secret,clean)
         self.assertNotIn('B'*30,clean)

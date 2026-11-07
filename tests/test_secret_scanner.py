@@ -1,0 +1,30 @@
+import importlib.util
+from pathlib import Path
+import unittest
+
+class SecretScannerTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        p=Path(__file__).resolve().parents[1]/"tasks/scan-secrets.py"
+        spec=importlib.util.spec_from_file_location("citerag_scanner",p)
+        cls.mod=importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.mod)
+    def test_detects_constructed_token_types_without_echoing_values(self):
+        samples=[
+            "sk-"+"A"*24,
+            "ghp_"+"A"*30,
+            "ses_"+"A"*24,
+            "https"+"://user:password@example.invalid/path",
+            "BEGIN"+" PRIVATE KEY",
+            "Authorization: Bearer "+"B"*30,
+        ]
+        for sample in samples:
+            with self.subTest(index=samples.index(sample)):
+                self.assertTrue(self.mod.issues_for_line("docs/sample.md",sample))
+    def test_allows_only_expected_provenance(self):
+        brand="moe"+"-opencode-rag"
+        self.assertFalse(self.mod.issues_for_line("NOTICE","Derived from "+brand))
+        self.assertTrue(self.mod.issues_for_line("docs/sample.md","Derived from "+brand))
+    def test_safe_defaults(self):
+        self.assertFalse(self.mod.issues_for_line(".env.example","CITERAG_OMNIROUTE_API_KEY="))
+        self.assertFalse(self.mod.issues_for_line("citerag/answer.py",'api_key=os.getenv("CITERAG_OMNIROUTE_API_KEY","")'))

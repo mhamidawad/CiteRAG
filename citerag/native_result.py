@@ -57,7 +57,7 @@ def sanitize_trace(stdout):
 
 def runtime_fingerprint():
     root=Path(__file__).resolve().parents[1]
-    files=['configs/native-rag.json','rag/native_result.py','rag/native.py','rag/semantic.py','rag/context.py','rag/freshness.py','rag/server.py','rag/quotes.py','rag/answer.py','rag/web.py','context-sources.json','retrieval-policy.json','tasks/verify-native.py']
+    files=['citerag/native_result.py','citerag/native.py','citerag/semantic.py','citerag/context.py','citerag/freshness.py','citerag/server.py','citerag/quotes.py','citerag/answer.py','citerag/web.py']
     return hashlib.sha256(b''.join(name.encode()+b'\0'+(root/name).read_bytes() for name in files)).hexdigest()
 
 
