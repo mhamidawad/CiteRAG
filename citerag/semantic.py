@@ -3,7 +3,7 @@ import argparse, hashlib, json, os, re, sqlite3
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs"
-MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+MODEL = os.getenv("CITERAG_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
 KEYWORDS = ROOT / "data/keyword.sqlite3"
 _model = None
 def model():
@@ -12,7 +12,7 @@ def model():
         import torch
         from sentence_transformers import SentenceTransformer
         torch.set_num_threads(2)
-        _model = SentenceTransformer(MODEL, device="cpu", cache_folder=str(ROOT / "data/models"), local_files_only=os.environ.get("RAG_OFFLINE","1") == "1", trust_remote_code=False)
+        _model = SentenceTransformer(MODEL, device="cpu", cache_folder=os.getenv("CITERAG_MODEL_CACHE_DIR", str(ROOT / "data/models")), local_files_only=os.environ.get("CITERAG_OFFLINE","1") == "1", trust_remote_code=False)
     return _model
 def documents():
     total = 0
@@ -38,7 +38,7 @@ def chunks():
         for start in range(0,len(tokens),160):
             body = tokenizer.decode(tokens[start:start+200], skip_special_tokens=True)
             if body.strip():
-                yield {"id":hashlib.sha256((source+str(start)+body).encode()).hexdigest(), "source":source, "token_start":start, "text":body, "kind":metadata.get("kind", "project_document"), "project":metadata.get("project", "rag-team"), "session_id":metadata.get("session_id", ""), "source_sha256":hashlib.sha256(text.encode()).hexdigest()}
+                yield {"id":hashlib.sha256((source+str(start)+body).encode()).hexdigest(), "source":source, "token_start":start, "text":body, "kind":metadata.get("kind", "project_document"), "project":metadata.get("project", "default"), "session_id":metadata.get("session_id", ""), "source_sha256":hashlib.sha256(text.encode()).hexdigest()}
 def ingest():
     from citerag.freshness import check_writer_access
     check_writer_access()
