@@ -33,7 +33,7 @@ for read-only checks and safe shutdown.
 
 1. GitHub Actions jobs cannot start: GitHub run 42413855935 reports an account
    billing/spending-limit issue **before any test step executes**.
-2. Draft CI workflow PR #19 is unmerged. No green GitHub CI run exists.
+2. CI workflow PR #19 was merged into private `main` (commit `ef40e0e7`). Jobs still cannot start because of the account billing restriction, and no green GitHub CI run exists.
 3. No verified private GHCR image digest or remotely built image has been
    tested on the VM. **Do not build Docker images on this production host.**
 4. Independent fresh-install validation and Docker isolated runtime, health,
