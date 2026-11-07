@@ -1,0 +1,32 @@
+# OFF by default: no agent inference or automatic CircleCI consumption.
+# When the account is connected, manually trigger run_workers=true.
+version: 2.1
+
+parameters:
+  run_workers:
+    type: boolean
+    default: false
+
+jobs:
+  supervisor_worker_preflight:
+    docker:
+      - image: cimg/python:3.12
+    resource_class: small
+    parallelism: 5
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - checkout
+      - run:
+          name: Bounded five-slot Supervisor worker readiness check
+          no_output_timeout: 2m
+          command: python tasks/circleci_worker.py
+      - store_artifacts:
+          path: /tmp/citerag-worker-result.json
+          destination: worker-result.json
+
+workflows:
+  manual_supervisor_preflight:
+    when: << pipeline.parameters.run_workers >>
+    jobs:
+      - supervisor_worker_preflight
