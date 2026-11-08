@@ -1,0 +1,33 @@
+name: CiteRAG container build acceptance
+
+on:
+  pull_request:
+    paths:
+      - "Dockerfile"
+      - "requirements.lock.txt"
+      - "citerag/**"
+      - "tasks/**"
+      - ".github/workflows/container.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  container-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check Dockerfile and build context
+        run: |
+          test -f Dockerfile
+          test -f requirements.lock.txt
+          test -f .dockerignore
+      - name: Build image on GitHub runner (never Oracle)
+        run: docker build --pull --tag citerag:ci .
+      - name: Inspect image and nonroot runtime imports
+        run: |
+          docker image inspect citerag:ci --format '{{.Id}} {{.Config.User}}'
+          test "$(docker image inspect citerag:ci --format '{{.Config.User}}')" = "65532:65532"
+          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 128 --memory 3g --cpus 2 --tmpfs /tmp:rw,nosuid,size=64m citerag:ci python -c 'import citerag.web, citerag.server, lancedb, sentence_transformers; print("CITERAG_CONTAINER_IMPORT_OK")'
