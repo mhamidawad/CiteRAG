@@ -106,6 +106,9 @@ class ControllerTests(unittest.TestCase):
                 "next_page_token":"repeat"}
             raise AssertionError(path)
         with self.assertRaises(c.GateError): c.inspect("fake",get)
+    def test_pagination_denies_dispatch(self):
+        getter,calls=self.service(fail="paginate")
+        with self.assertRaises(c.GateError):c.trigger("fake",getter)
 
     def test_auth_failure_prevents_dispatch(self):
         def rejected(*args,**kwargs):raise c.GateError("CircleCI API HTTP 401")

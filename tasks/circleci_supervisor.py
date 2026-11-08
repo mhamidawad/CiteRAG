@@ -13,6 +13,7 @@ from pathlib import Path
 
 PROJECT = "circleci/Kx8pciLC7qhz2rchu5dCCp/K7MgxSTs4WcZYBZn3MYSKh"
 BRANCH = "main"
+BRANCH = "feat/circleci-20-concurrency-cap-20261108"
 DEFINITION = "e4883277-27dc-4756-9494-1394cc7c497e"  # build-and-test
 MAX_SLOTS = 20
 API = "https://circleci.com/api/v2/"
@@ -89,6 +90,13 @@ def inspect(token, get=request):
         page = next_page
     else:
         raise GateError("More than five pages of pipeline history")
+    data = get(token, "GET", "project/" + PROJECT + "/pipeline")
+    entries = data.get("items", [])
+    if not isinstance(entries, list):
+        raise GateError("Invalid pipeline list")
+    # Fail closed on pagination: cannot certify an idle project from a partial listing.
+    if data.get("next_page_token"):
+        raise GateError("Unbounded pipeline history: pagination requires operator review")
     active = []
     observed = []
     for p in entries:

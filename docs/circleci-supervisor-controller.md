@@ -9,6 +9,7 @@ This is **not** a 20-agent OpenCode inference executor.
 - Oracle remains the OpenCode Supervisor host.
 - `tasks/circleci_supervisor.py status` queries the verified CircleCI project
   and scans up to five pages / 100 pipelines; unknown or incomplete state blocks dispatch.
+  and refuses to infer idle status when API history or workflow state is incomplete.
 - `tasks/circleci_supervisor.py dispatch --confirm-readonly-20` explicitly
   requests **one** 20-way read-only preflight for the reviewed branch. It
   refuses dispatch if any inspected pipeline is active, or if CircleCI API
