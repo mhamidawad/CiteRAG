@@ -1,5 +1,4 @@
-# OFF by default: no agent inference or automatic CircleCI consumption.
-# When the account is connected, manually trigger run_workers=true.
+# OFF by default. Manual read-only 20-shard acceptance only; NEVER deployment.
 version: 2.1
 
 parameters:
@@ -25,98 +24,8 @@ jobs:
           path: /tmp/citerag-worker-result.json
           destination: worker-result.json
 
-      - deploy_to_production:
-          docker:
-            - image: cimg/python:3.12
-          resource_class: small
-          environment:
-            PYTHONDONTWRITEBYTECODE: "1"
-          steps:
-            - checkout
-            - run:
-                name: Deploy CiteRAG to production
-                command: |
-                  circleci run release plan \
-                    --environment-name="production" \
-                    --component-name="CiteRAG" \
-                    --target-version="${CIRCLE_SHA1}"
-                  # Insert your deployment steps here (e.g., docker push, helm upgrade, etc.)
-                  circleci run release update --status=DEPLOYED
-            - store_artifacts:
-                path: /tmp/deploy-result.json
-                destination: deploy-result.json
-
-      - run:
-          name: Plan a deploy
-          command: |
-            circleci run release plan deploy \
-              --environment-name="production" \
-              --component-name="CiteRAG" \
-              --target-version="v1.0"
-      # Your job here doing the actual deployment
-      - run:
-          name: Update planned deploy to FAILED
-          command: circleci run release update deploy --status=FAILED
-          when: on_fail
-
-
-      - validate_release:
-          docker:
-            - image: cimg/python:3.12
-          resource_class: small
-          environment:
-            PYTHONDONTWRITEBYTECODE: "1"
-          steps:
-            - checkout
-            - run:
-                name: Run release validation tests
-                command: |
-                  # Insert your test suite here (e.g., pytest, npm test, etc.)
-                  # Example:
-                  # python -m pytest tests/ -v
-                  # If validation passes, mark the release as validated:
-                  circleci run release update --status=VALIDATED
-                  # If validation fails, exit with a non-zero status to stop the pipeline:
-                  exit 1
-            - store_artifacts:
-                path: /tmp/validation-result.json
-                destination: validation-result.json
-
-      - rollback_release:
-          docker:
-            - image: cimg/python:3.12
-          resource_class: small
-          environment:
-            PYTHONDONTWRITEBYTECODE: "1"
-          steps:
-            - checkout
-            - run:
-                name: Rollback release to previous version
-                command: |
-                  circleci run release rollback \
-                    --environment-name="production" \
-                    --component-name="CiteRAG"
-            - store_artifacts:
-                path: /tmp/rollback-result.json
-                destination: rollback-result.json
-
 workflows:
   manual_supervisor_preflight:
     when: << pipeline.parameters.run_workers >>
     jobs:
       - supervisor_worker_preflight
-
-  deploy_pipeline:
-    when: << pipeline.parameters.run_workers >>
-    jobs:
-      - supervisor_worker_preflight
-      - deploy_to_production:
-          requires: [supervisor_worker_preflight]
-      - validate_release:
-          requires: [deploy_to_production]
-      - rollback_release:
-          requires: [validate_release]
-          filters:
-            branches:
-              only:
-                - main
