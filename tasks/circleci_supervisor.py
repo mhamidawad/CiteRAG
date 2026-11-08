@@ -13,7 +13,6 @@ from pathlib import Path
 
 PROJECT = "circleci/Kx8pciLC7qhz2rchu5dCCp/K7MgxSTs4WcZYBZn3MYSKh"
 BRANCH = "main"
-BRANCH = "feat/circleci-20-concurrency-cap-20261108"
 DEFINITION = "e4883277-27dc-4756-9494-1394cc7c497e"  # build-and-test
 MAX_SLOTS = 20
 API = "https://circleci.com/api/v2/"

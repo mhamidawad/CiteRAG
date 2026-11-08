@@ -39,6 +39,9 @@ class ControllerTests(unittest.TestCase):
             raise AssertionError("unanticipated API call")
         return getter,calls
 
+    def test_approved_checkout_is_main(self):
+        self.assertEqual(c.BRANCH, "main")
+
     def test_no_active_pipeline_dispatches_one_bounded_run(self):
         getter,calls=self.service()
         result=c.trigger("fake",getter)
