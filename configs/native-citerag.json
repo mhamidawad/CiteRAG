@@ -1,0 +1,79 @@
+{
+  "agents": {
+    "citerag-answer": {
+      "description": "Use the authenticated, project-scoped CiteRAG search tool, no other tools.",
+      "mode": "primary",
+      "model": {
+        "model": "ollama-local/qwen3.5:4b-opencode",
+        "providerID": "omniroute"
+      },
+      "permissions": [
+        {
+          "action": "*",
+          "effect": "deny",
+          "resource": "*"
+        },
+        {
+          "action": "citerag_rag_search",
+          "effect": "allow",
+          "resource": "*"
+        }
+      ],
+      "steps": 3,
+      "system": "Answer only by calling citerag_rag_search with the user question and limit 1. Copy one complete sentence verbatim from the returned evidence text. On a new line, cite Source: docs/path.md followed by Chunk ID: the exact 64-character id from that tool result. Do not paraphrase, invent facts, use other tools or omit a source. If no evidence is found, respond: Insufficient evidence in the approved project sources."
+    }
+  },
+  "mcp": {
+    "servers": {
+      "citerag": {
+        "codemode": false,
+        "headers": {
+          "Authorization": "Bearer {env:CITERAG_API_TOKEN}"
+        },
+        "type": "remote",
+        "url": "http://127.0.0.1:48761/mcp"
+      }
+    }
+  },
+  "model": {
+    "model": "ollama-local/qwen3.5:4b-opencode",
+    "providerID": "omniroute"
+  },
+  "permissions": [
+    {
+      "action": "*",
+      "effect": "deny",
+      "resource": "*"
+    },
+    {
+      "action": "citerag_rag_search",
+      "effect": "allow",
+      "resource": "*"
+    }
+  ],
+  "plugins": [
+    "-opencode.tool.*",
+    "-opencode.browser",
+    "-opencode.tools"
+  ],
+  "providers": {
+    "omniroute": {
+      "models": {
+        "ollama-local/qwen3.5:4b-opencode": {
+          "body": {
+            "max_tokens": 512,
+            "reasoning_effort": "none",
+            "temperature": 0
+          },
+          "name": "Local Qwen RAG"
+        }
+      },
+      "name": "OmniRoute",
+      "package": "aisdk:@ai-sdk/openai-compatible",
+      "settings": {
+        "apiKey": "{env:CITERAG_OMNIROUTE_API_KEY}",
+        "baseURL": "http://127.0.0.1:20128/v1"
+      }
+    }
+  }
+}
