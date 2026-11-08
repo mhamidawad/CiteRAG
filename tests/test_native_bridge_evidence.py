@@ -21,14 +21,14 @@ class TraceGateTests(unittest.TestCase):
         from citerag.native_result import ABSTENTION
         event = [
             {"type": "tool_use", "part": {
-                "tool": "moe-rag_rag_search",
+                "tool": "sample_rag_search",
                 "state": {"status": "completed", "output": json.dumps({"results": []})}
             }},
             {"type": "text", "part": {"text": ABSTENTION}},
             {"type": "step_finish", "part": {"reason": "stop"}},
         ]
         out = gate.verify("\n".join(json.dumps(x) for x in event),
-                          exit_code=0, tool="moe-rag_rag_search")
+                          exit_code=0, tool="sample_rag_search")
         self.assertEqual(out["status"], "PASS")
         self.assertFalse(out["backend_identity_attested"])
         self.assertFalse(out["standalone_production_certified"])
@@ -36,7 +36,7 @@ class TraceGateTests(unittest.TestCase):
 
     def test_fails_without_real_tool(self):
         result = gate.verify(json.dumps({"type": "text", "part": {"text": "ok"}}),
-                             exit_code=0, tool="moe-rag_rag_search")
+                             exit_code=0, tool="sample_rag_search")
         self.assertEqual(result["status"], "FAIL")
 
     def test_fails_when_nonzero_exit(self):

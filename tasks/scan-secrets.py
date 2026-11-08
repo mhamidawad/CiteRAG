@@ -30,6 +30,12 @@ SAFE_LINE_HASHES = {
     # Exact historical noncredential MCP alias; current docs omit the alias.
     ("docs/native-opencode-acceptance.md", "0bc7a5f35ddd83724270e6ff4b087cb29a85b74d8a49ec091befbec5da6699aa"),
     ("docs/native-opencode-acceptance.md", "99b30a58a1e4ca68cafb865093dd8b87b5067d81119ae82159593fc347870397"),
+    # Audited historical noncredential alias, now removed from current sources.
+    ("tasks/native_bridge_evidence.py", "44882a63b9d22bf0e0092eda22b50b87921654995b931fe6dc39234e2bfabade"),
+    ("tests/test_native_bridge_evidence.py", "e2eecd61baa673d4f0dea0fc1f67fa4118108a4cdc1a785142610958e0810677"),
+    ("tests/test_native_bridge_evidence.py", "169f05959dc1afd694da5e33a39f87463e08fea8d9e6ef9c484b49828083b09d"),
+    ("tests/test_native_bridge_evidence.py", "c6dba820c7940166271cb85706a6ecc8f7f093f849e4ba6dce17a7c0e499ba0d"),
+    ("docs/native-trace-evidence.md", "de092149c3db544a59fb6c5d2afb3ae307428e19df41c55960e260d29d1b27b9"),
     # Historical documentation used the instance nickname (not a credential).
     ("docs/circleci-supervisor-controller.md", "ad4a4bcbf3387d0a588dfda634681f4fd75131280310aa97d6817991581b2397"),
 }

@@ -11,7 +11,7 @@ expected approved document source:
 
 ```sh
 python3 tasks/native_bridge_evidence.py /path/to/sanitized-trace.jsonl \
-  --exit-code 0 --tool moe-rag_rag_search \
+  --exit-code 0 --tool project_rag_search \
   --expected-source docs/architecture.md
 ```
 

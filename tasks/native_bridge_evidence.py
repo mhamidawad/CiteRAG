@@ -11,7 +11,7 @@ from pathlib import Path
 from citerag.native_result import evaluate
 
 MAX_TRACE_BYTES = 5 * 1024 * 1024
-ALLOWED_TOOLS = frozenset(("moe-rag_rag_search", "citerag_search"))
+TOOL_PATTERN = re.compile(r"[a-z][a-z0-9_-]{0,63}_rag_search")
 
 
 class EvidenceError(RuntimeError):
@@ -19,7 +19,7 @@ class EvidenceError(RuntimeError):
 
 
 def verify(trace, *, exit_code, tool, expected_source=None):
-    if tool not in ALLOWED_TOOLS:
+    if not isinstance(tool, str) or not (tool == "citerag_search" or TOOL_PATTERN.fullmatch(tool)):
         raise EvidenceError("UNAPPROVED_TOOL_NAME")
     if not isinstance(exit_code, int) or isinstance(exit_code, bool):
         raise EvidenceError("INVALID_EXIT_CODE")
@@ -53,7 +53,7 @@ def verify(trace, *, exit_code, tool, expected_source=None):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("trace", type=Path)
-    ap.add_argument("--tool", choices=sorted(ALLOWED_TOOLS), required=True)
+    ap.add_argument("--tool", required=True, help="Exact tool name observed in the trace")
     ap.add_argument("--exit-code", type=int, required=True)
     ap.add_argument("--expected-source", default=None)
     args = ap.parse_args(argv)
