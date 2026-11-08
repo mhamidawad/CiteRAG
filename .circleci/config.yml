@@ -46,6 +46,20 @@ jobs:
                 path: /tmp/deploy-result.json
                 destination: deploy-result.json
 
+      - run:
+          name: Plan a deploy
+          command: |
+            circleci run release plan deploy \
+              --environment-name="production" \
+              --component-name="CiteRAG" \
+              --target-version="v1.0"
+      # Your job here doing the actual deployment
+      - run:
+          name: Update planned deploy to FAILED
+          command: circleci run release update deploy --status=FAILED
+          when: on_fail
+
+
       - validate_release:
           docker:
             - image: cimg/python:3.12
