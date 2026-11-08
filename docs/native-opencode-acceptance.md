@@ -13,10 +13,10 @@ has **not** passed; do not advertise standalone native OpenCode as ready.
   temporary listener. The verified run took about 149 seconds.
 - A temporary authenticated CiteRAG MCP container was attached to the OpenCode
   Docker network, without publishing a host port. An isolated temporary
-  OpenCode profile pointed its existing `moe-rag` tool at the protected
+  OpenCode profile pointed its existing RAG retrieval tool at the protected
   CiteRAG endpoint and supplied a temporary Authorization header.
 - OpenCode's bounded `mcp list` completed with exit code 0 and
-  `moe-rag connected`. No model inference was sent by this network probe;
+  an authenticated MCP tool marked connected. No inference was sent by this probe;
   the temporary token-bearing profile and temporary MCP container were removed.
 - This proves transport and authentication reachability, **not** an end-to-end
   generated answer against standalone CiteRAG sources.

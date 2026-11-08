@@ -27,6 +27,9 @@ SAFE_LINE_HASHES = {
     ("docs/circleci-supervisor-controller.md", "ad4a4bcbf3387d0a588dfda634681f4fd75131280310aa97d6817991581b2397"),
     ("tests/test_context.py", "37486930fd6cf97bf63d48df6d57cbc111d557a9a35b12d4893baf881fa5d829"),
     ("docs/circleci-thirty-slots.md", "12038242c9bcd10e272d6c5d38b44d1073231f32216ed64dd9e6f3192486ce45"),
+    # Exact historical noncredential MCP alias; current docs omit the alias.
+    ("docs/native-opencode-acceptance.md", "0bc7a5f35ddd83724270e6ff4b087cb29a85b74d8a49ec091befbec5da6699aa"),
+    ("docs/native-opencode-acceptance.md", "99b30a58a1e4ca68cafb865093dd8b87b5067d81119ae82159593fc347870397"),
     # Historical documentation used the instance nickname (not a credential).
     ("docs/circleci-supervisor-controller.md", "ad4a4bcbf3387d0a588dfda634681f4fd75131280310aa97d6817991581b2397"),
 }
