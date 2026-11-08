@@ -3,7 +3,7 @@ version: 2.1
 parameters:
   run_workers:
     type: boolean
-    default: false
+    default: true
 jobs:
   supervisor_worker_preflight:
     docker:
