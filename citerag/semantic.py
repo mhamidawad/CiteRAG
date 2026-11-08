@@ -15,6 +15,7 @@ def model():
         _model = SentenceTransformer(MODEL, device="cpu", cache_folder=os.getenv("CITERAG_MODEL_CACHE_DIR", str(ROOT / "data/models")), local_files_only=os.environ.get("CITERAG_OFFLINE","1") == "1", trust_remote_code=False)
     return _model
 def documents():
+    from citerag.repository_sources import repository_documents
     total = 0
     for path in sorted(DOCS.rglob("*")):
         if path.is_symlink() or not path.is_file() or path.suffix not in {".md",".txt"}:
@@ -24,16 +25,23 @@ def documents():
         if any(part.startswith(".") for part in path.relative_to(DOCS).parts):
             continue
         text = path.read_text(encoding="utf-8")
-        total += len(text)
+        total += len(text.encode("utf-8"))
         if total > 2000000:
             raise ValueError("Corpus exceeds 2 MB limit")
         yield path.relative_to(ROOT).as_posix(), text
+    for source,text in repository_documents():
+        total += len(text.encode("utf-8"))
+        if total > 2000000:
+            raise ValueError("Corpus exceeds 2 MB limit")
+        yield source,text
 def chunks():
     tokenizer = model().tokenizer
     provenance_path = DOCS / "context/manifest.json"
     provenance = json.loads(provenance_path.read_text()) if provenance_path.exists() else {}
     for source, text in documents():
         metadata = provenance.get(source.removeprefix("docs/context/"), {})
+        if source.startswith("repositories/"):
+            metadata = {"kind":"source_code", "project":source.split("/",2)[1]}
         tokens = tokenizer.encode(text, add_special_tokens=False, truncation=False, verbose=False)
         for start in range(0,len(tokens),160):
             body = tokenizer.decode(tokens[start:start+200], skip_special_tokens=True)
@@ -146,7 +154,8 @@ def search(query, limit=5, max_distance=0.9):
     import lancedb
     table = lancedb.connect(str(ROOT/"data/lancedb")).open_table("documents")
     # Project scopes come only from explicitly approved source directories.
-    aliases={}
+    from citerag.repository_sources import configured_sources
+    aliases={name:{name} for name in configured_sources()}
     config_path=ROOT/"context-sources.json"
     if config_path.exists():
         for location in json.loads(config_path.read_text()).get("session_directories",[]):

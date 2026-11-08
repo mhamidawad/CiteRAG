@@ -20,7 +20,7 @@
         }
       ],
       "steps": 3,
-      "system": "Answer only by calling citerag_rag_search with the user question and limit 1. Copy one complete sentence verbatim from the returned evidence text. On a new line, cite Source: docs/path.md followed by Chunk ID: the exact 64-character id from that tool result. Do not paraphrase, invent facts, use other tools or omit a source. If no evidence is found, respond: Insufficient evidence in the approved project sources."
+      "system": "Call citerag_rag_search with query equal to the user question and numeric limit 1. Then copy the returned verbatim_answer string EXACTLY, including its source path and chunk identifier. Do not paraphrase, introduce, invent facts, or use any other tool. If the tool returns no evidence, respond exactly: Insufficient evidence in the approved project sources."
     }
   },
   "mcp": {
@@ -31,7 +31,7 @@
           "Authorization": "Bearer {env:CITERAG_API_TOKEN}"
         },
         "type": "remote",
-        "url": "http://127.0.0.1:48761/mcp"
+        "url": "{env:CITERAG_NATIVE_MCP_URL}"
       }
     }
   },

@@ -21,6 +21,9 @@ PATTERNS = {
 # Audited safe source literals. Fingerprints are exact-line SHA-256 values;
 # exemptions cannot be broadened by changing the fixture or runner line.
 SAFE_LINE_HASHES = {
+    # Public hosted-runner labels: exact path/line only, including historical refresh.
+    (".github/workflows/context7-refresh.yml", "60f5fed467f29e503f9adfee203ba98deb3bddee1851db827f4b1e08c0380598"),
+    (".github/workflows/context7-refresh.yml", "8696328bb3578e73007deb73951f192dd6d9e5894858a0998c4137ba59de553d"),
     (".github/workflows/tests.yml", "8696328bb3578e73007deb73951f192dd6d9e5894858a0998c4137ba59de553d"),
     (".github/workflows/container.yml", "8696328bb3578e73007deb73951f192dd6d9e5894858a0998c4137ba59de553d"),
     (".github/workflows/publish.yml", "8696328bb3578e73007deb73951f192dd6d9e5894858a0998c4137ba59de553d"),

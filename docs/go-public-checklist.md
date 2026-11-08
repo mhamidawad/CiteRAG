@@ -1,35 +1,30 @@
-# CiteRAG v0.1.0 go-public gate — NOT APPROVED
+# Release certification checklist
 
-CiteRAG remains PRIVATE. Do not merge stacked draft PRs, release v0.1.0, make the repository public, or expose network listeners without the owner's explicit approval.
+The source repository is already public and GitHub release `v1.0.0` exists. Earlier statements that the repository remains private or all PRs are drafts are historical. The owner authorized completing release and production work on 2026-11-08; this checklist records technical evidence, not a request for repeated permission.
 
-## Verified foundations
+## Previously verified foundations
 
-- [x] Private `mhamidawad/CiteRAG` repository with new Git history (not a source-repo rename)
-- [x] Fixed source baseline: `cc695180be680ae3946880518d34bcca0b648547`
-- [x] Standalone local ingestion, matching cited retrieval, unsupported-answer abstention, embedding reuse and deleted-document cleanup on isolated sample docs
-- [x] Independent Python MCP client can list/call `rag_search` and close the isolated listener
-- [x] Retrieval-only REST workflow returns cited, validated extractive answers; invalid adapter requests return 400 without side effects
-- [x] Local unit/security test suite passes (latest recorded count: 73)
-- [x] GitHub repository topics and description populated; visibility still PRIVATE
+- [x] Fresh-history source-derived repository and isolated sample-document retrieval.
+- [x] Citation validation, abstention, embedding reuse and deleted-chunk cleanup.
+- [x] Independent MCP client and retrieval-only REST acceptance.
+- [x] Authenticated REST/MCP staging, including anonymous rejection.
+- [x] GitHub Actions test/build runs and remote GHCR images at earlier reviewed baselines.
+- [x] Authentication-equivalent isolated image rollback and re-promotion.
+- [x] CircleCI retirement; GitHub Actions remains the CI provider.
 
-## Required remaining gates — not satisfied
+## Exact candidate acceptance
 
-- [ ] Owner-coordinated rotation of previously exposed Context7 and OmniRoute credentials; verify old keys revoked without disrupting production
-- [ ] Independent full-tree **and all-commits/refs** secret/history audit, including synthetic test fixtures, docs and images
-- [ ] Owner review of code, GitHub Issues, stacked PR ordering, diff/commit history, dependencies and license provenance
-- [ ] Fresh Python venv installed from lock on a clean environment, with compileall and all tests passing
-- [ ] Full repository code ingestion, safe workspace isolation and per-workspace authorization acceptance
-- [ ] Authenticated remote MCP transport and tested tool schema/error behavior
-- [ ] End-to-end OpenCode and OmniRoute generating-adapter acceptance with zero unsupported claims
-- [ ] Full dashboard visual QA, diagnostics, source management and safe settings export
-- [ ] Configure GitHub secret scanning, Dependabot and branch protections
-- [ ] Resolve GitHub OAuth **workflow scope** blocker (Issue #6), and any account billing limitations, before enabling Actions
-- [ ] Green pinned-SHA CI, remote GHCR image build with digest, dependency review and image scan
-- [ ] Verify model-cache bootstrap, isolated loopback Docker deployment, service health and safe teardown
-- [ ] Verify rollback from a known image tag and ensure production containers are unaffected
-- [ ] Independent security review for path traversal, symlink escapes, data retention, logs, session exports, browser and API surfaces
-- [ ] Final documented reproducible acceptance demonstration with real approved sample repository, measured benchmarks and evidence
+- [ ] Green tests, compilation and source/history scans for the exact release commit.
+- [ ] Real standalone OpenCode → authenticated CiteRAG MCP tool event → bounded free/local OmniRoute answer, with source/chunk and backend identity evidence.
+- [ ] Real repository ingestion and workspace/tenant authorization acceptance.
+- [ ] Rate limits, inference quotas/cost caps and private network boundaries.
+- [ ] Authorized credential rotation and old-key revocation evidence.
+- [ ] Browser visual/function acceptance, source management, diagnostics and settings export.
+- [ ] Fresh-host installation/model-cache bootstrap and measured resource evidence.
+- [ ] Dependency/license review, dependency/image security scan, image/source attestation.
+- [ ] GitHub secret scanning, push protection, Dependabot and branch protection verified.
+- [ ] Final immutable release image and secure rollback target verified.
+- [ ] Production deployment, health/authorization tests and rollback acceptance.
+- [ ] Dated signed acceptance and reproducible evidence, with unresolved limits stated.
 
-## Owner-only release decision
-
-After **all** gates pass, the owner may explicitly approve (1) PR merges in dependency order, (2) public visibility, (3) `v0.1.0` release and associated GHCR image publication. Until then, all outputs remain private drafts. No approval is inferred from previous repository access or generic deployment permissions.
+See [release-certification.md](release-certification.md) for the audit snapshot. Do not mark a gate passed solely because code exists, a model replies, or a release tag exists.

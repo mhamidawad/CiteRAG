@@ -1,83 +1,64 @@
-# CiteRAG - Self-hosted, source-cited RAG for OpenCode and AI coding agents
+# CiteRAG — Self-hosted, source-cited RAG for coding agents
 
-**Private development preview — not production ready.** CiteRAG is self-hosted RAG for coding agents, built around CPU-friendly local embeddings, LanceDB hybrid search and source-cited responses. It is derived from the owner's private `moe-opencode-rag` project, with original history and runtime data deliberately excluded.
+CiteRAG combines local CPU embeddings, LanceDB vector search, SQLite FTS5 keyword search and source-cited responses. It is derived from the owner's RAG project with original runtime data and history excluded. The source repository is public and a `v1.0.0` GitHub release exists; those facts do not establish production certification.
 
-## Current capabilities (verified locally)
+## Capabilities and acceptance
 
-- Python retrieval works without OpenCode or an LLM.
-- CPU `sentence-transformers/all-MiniLM-L6-v2` embeddings; LanceDB vectors and SQLite FTS5 keyword search with reciprocal rank fusion.
-- Local re-indexing reused unchanged embeddings and removed deleted chunks in the isolated smoke test.
-- Extractive source citations are validated against retrieved content; unsupported queries can abstain instead of generating unsupported text.
-- An independent Python MCP client discovered and called `rag_search` over an isolated localhost streamable HTTP endpoint, then confirmed cleanup.
-- REST `/api/ask` can return validated cited excerpts or an exact abstention in `retrieval-only` mode.
-- A preliminary adapter registry lists `opencode`, `omniroute`, `retrieval-only`, and the dashboard reads the registry. Listing an adapter is **not** proof of its generation acceptance.
+| Capability | Evidence and limit |
+| --- | --- |
+| Retrieval | MiniLM/LanceDB/FTS5 retrieval, embedding reuse, deletion and unsupported-query abstention passed isolated sample-document acceptance. |
+| REST and MCP | Bearer authentication and independent `rag_search` client acceptance passed isolated staging. |
+| Agent selection | Registry exposes `retrieval-only`, `omniroute`, `opencode`; registration alone does not certify generation. |
+| Native OpenCode | Bounded standalone acceptance runner exists. A real standalone tool/cited-answer trace must pass before autonomous production. |
+| Delivery | GitHub Actions remote test/build workflows and GHCR secure image/rollback rehearsals have passed earlier baselines. Every new release needs checks on its exact source. |
+| Isolation | Immutable secure candidate → previous secure → candidate rehearsal passed; production cutover is a separate gate. |
 
-## Quick start — local developer checkout
+See [release certification](docs/release-certification.md) for the dated evidence and outstanding gates. CircleCI has been retired; the existing GitHub baseline runner executes 20 sequential logical preflight checks, not 20 cloud workers.
 
-Requirements: Python 3.12; preinstalled dependencies from the pinned `requirements.lock.txt`; a locally cached MiniLM model. **A clean dependency install has not yet been independently accepted.** The existing CI workflow cannot be pushed until workflow permissions are corrected.
+## Developer setup
+
+Use Python 3.12 and a locally cached `sentence-transformers/all-MiniLM-L6-v2` model. Runtime containers default to offline model loading. For this project's Oracle deployment, build container images on GitHub Actions rather than the VM.
 
 ```bash
 python -m venv .venv
 . .venv/bin/activate
-# Check that pinned CPU dependencies and the configured PyTorch index are available.
-python -m pip install -r requirements.lock.txt
+python -m pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.lock.txt
 python -m unittest discover -s tests -q
 python -m compileall -q citerag
-python -m citerag.semantic ingest
-python -m citerag.cli ingest
-python -m citerag.cli search "OpenCode"
-python tasks/verify-retrieval.py
-python tasks/verify-mcp-client.py
+python tasks/scan-secrets.py
+python tasks/scan-secrets.py --history
 ```
 
-The two ingest examples exercise different modes: `semantic` uses LanceDB + MiniLM + FTS5; `cli` is the standard-library-only SQLite FTS5 fallback. Place approved `.md`/`.txt` documents under `docs/` before indexing. The current code does **not** automatically ingest an arbitrary full source-code repository.
+Dependency versions are pinned; hash locking, image-base digest pinning and a complete dependency security review require separate acceptance. Hosted CI installs the lock from a fresh runner; full clean-host model bootstrap and end-to-end installation require their own evidence.
 
-## Local API and MCP
+Place approved documents under `docs/`, then run `python -m citerag.semantic ingest` for MiniLM/LanceDB/FTS5 or `python -m citerag.cli ingest` for the standard-library SQLite fallback. The document loader currently accepts Markdown/text; arbitrary source-code repository ingestion is not automatic.
 
-The web app provides `GET /api/health`, `GET /api/adapters`, `GET /api/context`, `POST /api/ask`, and `GET /api/jobs/{job_id}`. The MCP server provides `rag_search(query, limit)` over streamable HTTP. Restrict access to trusted local clients. Remote authentication is not implemented; do not expose these listeners publicly.
+## API and security
 
-```bash
-CITERAG_WEB_HOST=127.0.0.1 CITERAG_WEB_PORT=18762 python -m citerag.web
-# In a separate process, only on a trusted local machine:
-CITERAG_MCP_HOST=127.0.0.1 CITERAG_MCP_PORT=18761 python -m citerag.server
-```
+The REST app provides `/api/health`, `/api/adapters`, `/api/context`, `/api/ask` and `/api/jobs/{job_id}`; MCP provides `rag_search` over streamable HTTP. Listener defaults are loopback ports 18762 (REST) and 18761 (MCP); deployed port mappings may differ.
 
-### Agent support
+Set a protected server-side `CITERAG_API_TOKEN` of at least 32 characters and `CITERAG_REQUIRE_AUTH=1` for authenticated operation. Non-loopback binding requires authentication. REST health is public process liveness; all other REST paths and all MCP paths require a bearer token when configured. Use private HTTPS or a trusted TLS reverse proxy. See [authenticated access](docs/authenticated-access.md).
 
-| Integration | Status |
-| --- | --- |
-| Retrieval-only REST | Tested locally against sample documents |
-| Independent MCP Python client | Tested locally over isolated loopback HTTP |
-| OpenCode generation adapter | Registered; **not accepted** as standalone integration |
-| OmniRoute direct generation | Configured opt-in; real standalone generation **not tested** |
-| Continue, custom MCP clients | Candidates; no tested profile or compatibility claim |
+No browser form should accept provider credentials. Do not commit credentials, indexes, session exports or model traces. Credential rotation and revocation must be verified through the authorized issuer.
 
 ## Configuration
 
 | Variable | Purpose | Default |
 | --- | --- | --- |
-| `CITERAG_MCP_HOST` | MCP listener interface | `127.0.0.1` |
-| `CITERAG_MCP_PORT` | MCP listener port | `18761` |
-| `CITERAG_WEB_HOST` | REST/dashboard listener interface | `127.0.0.1` |
-| `CITERAG_WEB_PORT` | REST/dashboard listener port | `18762` |
+| `CITERAG_WEB_HOST` / `CITERAG_WEB_PORT` | REST listener | `127.0.0.1` / `18762` |
+| `CITERAG_MCP_HOST` / `CITERAG_MCP_PORT` | MCP listener | `127.0.0.1` / `18761` |
+| `CITERAG_API_TOKEN` | Server-side bearer credential | Unset |
+| `CITERAG_REQUIRE_AUTH` | Require authentication on loopback too | Unset |
 | `CITERAG_EMBEDDING_MODEL` | Local embedding model | `sentence-transformers/all-MiniLM-L6-v2` |
-| `CITERAG_MODEL_CACHE_DIR` | Model cache location | `data/models` |
-| `CITERAG_OFFLINE` | Use local model files only | `1` |
-| `CITERAG_OMNIROUTE_URL` | Optional OmniRoute base URL | Unset |
-| `CITERAG_OMNIROUTE_API_KEY` | Optional generation credential | Unset |
-| `CITERAG_MODEL` | Optional generation model ID | Unset |
-| `CITERAG_WRITER_OWNER` | Optional writer-lease owner | Unset |
+| `CITERAG_MODEL_CACHE_DIR` | Model cache | `data/models` |
+| `CITERAG_OFFLINE` | Local model files only | `1` |
+| `CITERAG_OMNIROUTE_URL` | Generation routing base URL | Unset |
+| `CITERAG_OMNIROUTE_API_KEY` | Protected generation credential | Unset |
+| `CITERAG_MODEL` | Generation model | Unset |
+| `CITERAG_WRITER_OWNER` | Writer lease owner | Unset |
 
-No browser form accepts API keys; do not commit credentials. The dashboard adapter preference uses browser localStorage, guarded against storage exceptions.
+## Limitations and recovery
 
-## Safety and limitations
+Citations support checking an answer against retrieved material; they cannot guarantee the truth of the original source. Redaction is heuristic. Workspace permissions, quotas, browser acceptance and real generating-adapter traces need explicit release evidence.
 
-The approach is a source-cited RAG MCP server; it is **not** a guarantee of perfect factual correctness or "RAG without hallucination." Claim validation is conservative and extractive; a valid quote is not proof that an underlying source is true. Redaction is heuristic, workspace-level authorization and authenticated remote MCP transport remain unfinished, and no full fresh-install, image-build, production rollout or browser visual acceptance has passed. The source owner's previously exposed Context7/OmniRoute credentials still require coordinated rotation before any public release.
-
-See [architecture](docs/architecture.md), [adapters](docs/adapters.md), [rollback](docs/rollback.md), [security](SECURITY.md) and [NOTICE](NOTICE).
-
-## Troubleshooting / rollback
-
-If model loading fails, confirm the local MiniLM cache and `CITERAG_OFFLINE`. If no relevant source exists, the service should abstain. If an isolated MCP port is unexpectedly in use, do not kill another process. For rollback, stop only CiteRAG processes, retain a private snapshot of CiteRAG's own data if needed, and return to the verified previous branch; never modify original OpenCode or OmniRoute services. See [rollback](docs/rollback.md).
-
-**Status:** Private draft PRs only. There is no approved public release or v0.1.0 artifact.
+If offline model loading fails, check the approved model cache. Unsupported queries should abstain. Stop or roll back only CiteRAG's own services and preserve its private data snapshot; do not modify original OpenCode or OmniRoute services. See [architecture](docs/architecture.md), [adapters](docs/adapters.md), [Docker](docs/docker.md), [rollback](docs/rollback.md), [security](SECURITY.md) and [NOTICE](NOTICE).

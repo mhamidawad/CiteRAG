@@ -1,5 +1,6 @@
 """Private web interface for the bounded local retrieval/generation pipeline."""
 import os
+import asyncio
 import threading
 import secrets
 import time
@@ -10,9 +11,10 @@ from starlette.applications import Starlette
 from starlette.background import BackgroundTask
 from starlette.responses import HTMLResponse, JSONResponse
 from starlette.routing import Route
+from starlette.concurrency import run_in_threadpool
 from citerag.semantic import search, model
 from citerag.answer import answer, MODEL
-from citerag.native import answer as native_answer
+from citerag.native import answer as native_answer, verification_status
 from citerag.freshness import prepare_context
 from citerag.native_result import ABSTENTION,runtime_fingerprint,citation_and_claim_checks
 from citerag.quotes import verbatim_answer
@@ -77,13 +79,7 @@ def run_job(job_id, question, retrieval_only, use_native=False):
 
 
 def native_status():
-    root=Path(__file__).resolve().parents[1]
-    proof=root/'reports/native-current-verification.json'
-    binary=root/'data/tools/opencode-v2.2.5/extracted/opencode'
-    if not binary.is_file():return 'unavailable'
-    if not proof.exists():return 'not_verified'
-    data=json.loads(proof.read_text())
-    return 'verified' if data.get('status')=='PASS' and data.get('automatic_tool_selection_verified') and data.get('runtime_fingerprint')==runtime_fingerprint() else 'not_verified'
+    return verification_status()
 
 
 async def home(request):
@@ -101,6 +97,24 @@ async def health(request):
                          "native_opencode":native_status(),"busy":_generation.locked()})
 
 
+_inventory_cache = {}
+_inventory_lock = asyncio.Lock()
+
+async def repository_inventory():
+    from citerag.repository_sources import source_status
+    key = os.environ.get("CITERAG_REPOSITORY_SOURCES", "")
+    if not key:
+        return await run_in_threadpool(source_status)
+    async with _inventory_lock:
+        cached = _inventory_cache.get(key)
+        if cached and time.monotonic() - cached[0] < 30:
+            return cached[1]
+        inventory = await run_in_threadpool(source_status)
+        _inventory_cache.clear()
+        _inventory_cache[key] = (time.monotonic(), inventory)
+        return inventory
+
+
 async def context_status(request):
     root = Path(__file__).resolve().parents[1]
     manifest_path = root / "docs/context/manifest.json"
@@ -114,7 +128,51 @@ async def context_status(request):
     attempt=json.loads(attempt_path.read_text()) if attempt_path.exists() else {}
     task_path = root / "tasks/manifest.json"
     task = json.loads(task_path.read_text()) if task_path.exists() else {}
-    return JSONResponse({"imported_documents": len(manifest), "selected_sessions": sum(row.get("kind")=="opencode_session" for row in manifest.values()), "imported_messages": sum(row.get("messages",0) for row in manifest.values()), "indexed_chunks": index.get("chunks",0), "last_sync": datetime.fromtimestamp(manifest_path.stat().st_mtime,timezone.utc).isoformat() if manifest_path.exists() else None, "freshness":attempt,"last_successful_ingestion":runtime.get("updated_at"),"phase":task.get("phase","unknown"), "coverage":"Selected bounded history and approved project documents; not all historical sessions", "native_opencode":native_status(), "native_answers":len(list((root/"data/native-history").glob("*.md")))})
+    from citerag.repository_sources import source_status
+    from citerag.policy import configuration
+    workspace, limits, _ = configuration()
+    return JSONResponse({"workspace": workspace or "default", "repository_sources": await repository_inventory(), "admission_limits": limits, "imported_documents": len(manifest), "selected_sessions": sum(row.get("kind")=="opencode_session" for row in manifest.values()), "imported_messages": sum(row.get("messages",0) for row in manifest.values()), "indexed_chunks": index.get("chunks",0), "last_sync": datetime.fromtimestamp(manifest_path.stat().st_mtime,timezone.utc).isoformat() if manifest_path.exists() else None, "freshness":attempt,"last_successful_ingestion":runtime.get("updated_at"),"phase":task.get("phase","unknown"), "coverage":"Selected bounded history and approved project documents; not all historical sessions", "native_opencode":native_status(), "native_answers":len(list((root/"data/native-history").glob("*.md")))})
+
+
+async def sources(request):
+    from citerag.repository_sources import source_status
+    from citerag.policy import configuration
+    workspace, _, _ = configuration()
+    return JSONResponse({"workspace": workspace or "default", "sources": await repository_inventory(),
+                         "management": "operator-configured"})
+
+
+def run_reindex(job_id):
+    try:
+        result = prepare_context()
+        result["state"] = "completed" if result.get("status") == "completed" else "failed"
+    except Exception as exc:
+        result = {"state": "failed", "status": "failed", "error": type(exc).__name__}
+    finally:
+        _generation.release()
+    with _guard:
+        _jobs[job_id] = result
+
+
+async def reindex(request):
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Expected an empty JSON object"}, status_code=400)
+    if data != {}:
+        return JSONResponse({"error": "Sources are operator-configured"}, status_code=400)
+    if not _generation.acquire(blocking=False):
+        return JSONResponse({"error": "A request is already running"}, status_code=409)
+    job_id = secrets.token_urlsafe(18)
+    with _guard:
+        if len(_jobs) >= 20:
+            for old in list(_jobs):
+                if _jobs[old].get("state") != "running":
+                    del _jobs[old]
+                    break
+        _jobs[job_id] = {"state": "running"}
+    return JSONResponse({"job_id": job_id, "state": "running"}, status_code=202,
+                        background=BackgroundTask(run_reindex, job_id))
 
 
 async def ask(request):
@@ -142,6 +200,9 @@ async def ask(request):
             return JSONResponse({"error":"Invalid adapter config"},status_code=400)
         selected_native=data.get("use_native") is True
         selected_retrieval=data.get("retrieval_only") is True
+        chosen="retrieval-only" if selected_retrieval else "opencode" if selected_native else "omniroute"
+        if not next(item for item in adapter_capabilities() if item["name"]==chosen)["available"]:
+            return JSONResponse({"error":"Adapter is unavailable or unverified"},status_code=503)
     if not _generation.acquire(blocking=False):
         return JSONResponse({"error": "A request is already running. Wait for it to finish."}, status_code=409)
     job_id = secrets.token_urlsafe(18)
@@ -162,10 +223,11 @@ async def job(request):
     return JSONResponse(result if result is not None else {"error": "Unknown request"}, status_code=200 if result is not None else 404)
 
 
-app = Starlette(routes=[Route("/", home), Route("/api/health", health), Route("/api/adapters", adapters), Route("/api/context", context_status), Route("/api/ask", ask, methods=["POST"]), Route("/api/jobs/{job_id}", job)])
+app = Starlette(routes=[Route("/", home), Route("/api/health", health), Route("/api/adapters", adapters), Route("/api/context", context_status), Route("/api/sources", sources), Route("/api/reindex", reindex, methods=["POST"]), Route("/api/ask", ask, methods=["POST"]), Route("/api/jobs/{job_id}", job)])
 app.add_middleware(BearerAuth, public_paths=("/api/health",))
 
 if __name__ == "__main__":
     import uvicorn
+    validate_binding(os.getenv("CITERAG_WEB_HOST", "127.0.0.1"))
     model()
     uvicorn.run(app, host=os.getenv("CITERAG_WEB_HOST","127.0.0.1"), port=int(os.getenv("CITERAG_WEB_PORT","18762")), access_log=False)

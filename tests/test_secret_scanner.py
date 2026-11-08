@@ -42,3 +42,12 @@ class SecretScannerTests(unittest.TestCase):
     def test_safe_defaults(self):
         self.assertFalse(self.mod.issues_for_line(".env.example","CITERAG_OMNIROUTE_API_KEY="))
         self.assertFalse(self.mod.issues_for_line("citerag/answer.py",'api_key=os.getenv("CITERAG_OMNIROUTE_API_KEY","")'))
+
+    def test_documentation_refresh_runner_exception_is_exact_and_path_scoped(self):
+        for label in ("ub"+"untu-latest", "ub"+"untu-24.04"):
+            line="    runs-on: "+label
+            self.assertFalse(self.mod.issues_for_line(".github/workflows/context7-refresh.yml",line))
+            self.assertTrue(self.mod.issues_for_line("docs/sample.md",line))
+            self.assertTrue(self.mod.issues_for_line(".github/workflows/context7-refresh.yml",line+" # changed"))
+        token="Bearer "+"A"*24
+        self.assertTrue(self.mod.issues_for_line(".github/workflows/context7-refresh.yml",token))

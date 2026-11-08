@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | retrieval-only | Yes, isolated REST sample | No LLM; cited extractive response |
 | omniroute | Registration + legacy unit tests only | Optional model/key/base URL required; real inference untested |
-| opencode | Registration + legacy unit tests only | Original native verifier is not part of sanitized standalone package |
+| opencode | Registration + legacy unit tests only | Standalone bounded verifier exists; real native tool/cited-answer acceptance remains required |
 | additional agents | Not implemented | Add tests before claiming support |
 
 A future pluggable registry should enforce a `name`, `validate`, `run` contract and a strict JSON schema per adapter. Every generating adapter must pass the same citation and verbatim-claim validation as retrieval-only; a registered name does not imply a verified connection.
