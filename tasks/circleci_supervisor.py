@@ -90,13 +90,6 @@ def inspect(token, get=request):
         page = next_page
     else:
         raise GateError("More than five pages of pipeline history")
-    data = get(token, "GET", "project/" + PROJECT + "/pipeline")
-    entries = data.get("items", [])
-    if not isinstance(entries, list):
-        raise GateError("Invalid pipeline list")
-    # Fail closed on pagination: cannot certify an idle project from a partial listing.
-    if data.get("next_page_token"):
-        raise GateError("Unbounded pipeline history: pagination requires operator review")
     active = []
     observed = []
     for p in entries:
