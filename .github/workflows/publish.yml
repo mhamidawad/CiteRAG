@@ -40,5 +40,8 @@ jobs:
           IMAGE: ghcr.io/mhamidawad/citerag:sha-${{ github.sha }}
         run: |
           docker push "$IMAGE"
+          docker tag "$IMAGE" ghcr.io/mhamidawad/citerag:latest
+          docker push ghcr.io/mhamidawad/citerag:latest
           docker image inspect "$IMAGE" --format '{{json .RepoDigests}}'
           docker logout ghcr.io
+
