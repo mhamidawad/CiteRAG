@@ -1,0 +1,36 @@
+# Private local preview — not a production release
+
+The verified retrieval-only preview runs as a transient user service on
+`127.0.0.1:28762`. It uses an existing Python environment, the approved local
+`docs/` tree, the offline MiniLM cache in `data/models`, and the LanceDB/SQLite
+indices under `data/`. It **does not** verify fresh dependency installation,
+GHCR image reproducibility, remote MCP authentication, generating agents, or
+safe multi-workspace access.
+
+The preview's HTTP endpoints are **unauthenticated**. Never bind them to a
+public address, forward them through a public proxy, or open firewall ports.
+Use a trusted, authenticated SSH local tunnel if viewing remotely. Do not put
+secrets into the approved document tree.
+
+## Read-only checks
+
+- `systemctl --user is-active citerag-private-preview.service`
+- `ss -ltnp 'sport = :28762'` — must show `127.0.0.1` only
+- `curl --fail --max-time 5 http://127.0.0.1:28762/api/health`
+- `git status --short --branch`
+
+The health endpoint reports HTTP liveness, not generation-agent readiness.
+
+## Safe shutdown / rollback
+
+Run `systemctl --user stop citerag-private-preview.service`. Confirm
+`ss -ltn 'sport = :28762'` has no LISTEN entry. Do **not** stop the existing
+agent container, model router, or any other application. The ephemeral preview
+unit is not enabled for automatic startup after reboot.
+
+## Release blockers
+
+GitHub Actions must start and pass; remote image build, digest verification,
+isolated Docker runtime, source-authorization boundaries, authentication and
+generation-adapter acceptance must be independently verified before labeling
+CiteRAG production-ready.

@@ -24,8 +24,18 @@ ADAPTERS = {
     "retrieval-only": {"name": "retrieval-only", "schema": {"type": "object", "additionalProperties": False}, "generation": False},
 }
 
+def adapter_capabilities():
+    """Advertise only verified functionality as selectable, never infer from config."""
+    native=native_status()
+    generation_configured=bool(MODEL and os.getenv("CITERAG_OMNIROUTE_API_KEY") and os.getenv("CITERAG_OMNIROUTE_URL"))
+    states={"retrieval-only":"ready", "opencode":native,
+            "omniroute":"configured_not_verified" if generation_configured else "not_configured"}
+    return [{**data,"available":(name=="retrieval-only" or
+                                  (name=="opencode" and native=="verified")),
+             "status":states[name]} for name,data in ADAPTERS.items()]
+
 async def adapters(request):
-    return JSONResponse({"adapters": list(ADAPTERS.values())})
+    return JSONResponse({"adapters": adapter_capabilities()})
 
 
 _jobs = {}
@@ -122,6 +132,8 @@ async def ask(request):
             return JSONResponse({"error":"Unknown adapter"},status_code=400)
         if not isinstance(adapter_config,dict) or adapter_config:
             return JSONResponse({"error":"Invalid adapter config"},status_code=400)
+        if not next(item for item in adapter_capabilities() if item["name"]==explicit_adapter)["available"]:
+            return JSONResponse({"error":"Adapter is unavailable or unverified"},status_code=503)
         selected_native=explicit_adapter=="opencode"
         selected_retrieval=explicit_adapter=="retrieval-only"
     else:
