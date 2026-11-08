@@ -12,13 +12,13 @@ jobs:
     docker:
       - image: cimg/python:3.12
     resource_class: small
-    parallelism: 5
+    parallelism: 20
     environment:
       PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - checkout
       - run:
-          name: Bounded five-slot Supervisor worker readiness check
+          name: Bounded twenty-slot Supervisor worker readiness check
           no_output_timeout: 2m
           command: python tasks/circleci_worker.py
       - store_artifacts:

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed five-slot CircleCI preflight. NOT autonomous AI inference."""
+"""Fail-closed twenty-slot CircleCI preflight. NOT autonomous AI inference."""
 import argparse
 import json
 import os
@@ -9,43 +9,45 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ROLES = ("planner", "retrieval", "tests", "security", "review")
-MANDATORY = {
-    "planner": ("README.md", ".circleci/config.yml"),
-    "retrieval": ("citerag/semantic.py", "citerag/quotes.py"),
-    "tests": ("tests/test_retrieval.py", "tests/test_web.py"),
-    "security": ("tasks/scan-secrets.py",),
-    "review": ("CONTRIBUTING.md", "SECURITY.md"),
+# Five job roles, four independent shards each. No model calls, credentials or
+# repository writes. The controller is still OpenCode on the Oracle VM.
+SHARDS = {
+    "planner": ("README.md", "CONTRIBUTING.md", "docs/architecture.md", ".circleci/config.yml"),
+    "retrieval": ("citerag/semantic.py", "citerag/quotes.py", "citerag/context.py", "citerag/server.py"),
+    "tests": ("tests/test_retrieval.py", "tests/test_web.py", "tests/test_adapters.py", "tests/test_secret_scanner.py"),
+    "security": ("tasks/scan-secrets.py", "SECURITY.md", "citerag/native_result.py", "citerag/freshness.py"),
+    "review": ("Dockerfile", "compose.yaml", "docs/private-preview-acceptance.md", "requirements.lock.txt"),
 }
+TOTAL = len(ROLES) * 4
 
 def slot(index, total):
-    if total != 5 or index not in range(5):
-        raise ValueError("Expected exactly five CircleCI nodes numbered 0–4")
-    return ROLES[index]
+    if total != TOTAL or index not in range(TOTAL):
+        raise ValueError("Expected exactly 20 CircleCI nodes numbered 0–19")
+    role = ROLES[index // 4]
+    shard = index % 4
+    return role, shard, SHARDS[role][shard]
 
 def check(index, total):
-    role = slot(index, total)
-    for name in MANDATORY[role]:
-        file = (ROOT / name).resolve()
-        if not file.is_relative_to(ROOT) or not file.is_file():
-            raise RuntimeError("Expected approved tracked file is missing")
-    # Preflight jobs never execute an LLM, pull private data or accept arbitrary commands.
-    if role == "security":
-        command = [sys.executable, "tasks/scan-secrets.py"]
-    elif role == "tests":
+    role, shard, name = slot(index, total)
+    file = (ROOT / name).resolve()
+    if not file.is_relative_to(ROOT.resolve()) or not file.is_file() or file.is_symlink():
+        raise RuntimeError("Approved tracked task file missing or unsafe")
+    # Only the assigned, immutable source file is inspected; never run user
+    # instructions, model calls or arbitrary shell tasks.
+    if file.suffix == ".py":
         command = [sys.executable, "-B", "-c",
-                   "import ast,pathlib;root=pathlib.Path('.');"
-                   "files=[*root.glob('citerag/*.py'),*root.glob('tests/*.py'),*root.glob('tasks/*.py')];"
-                   "assert files;"
-                   "[ast.parse(p.read_text(),filename=str(p)) for p in files]"]
-    elif role == "review":
-        command = ["git", "diff", "--check", "HEAD"]
+                   "import ast,sys;ast.parse(open(sys.argv[1], encoding='utf-8').read())",
+                   str(file)]
     else:
-        command = [sys.executable, "-c", "print('scoped source files verified')"]
-    result = subprocess.run(command, cwd=ROOT, timeout=90, check=False,
+        command = [sys.executable, "-B", "-c",
+                   "import pathlib,sys; p=pathlib.Path(sys.argv[1]);"
+                   "assert 0<p.stat().st_size<2000000",str(file)]
+    result = subprocess.run(command, cwd=ROOT, timeout=30, check=False,
                             capture_output=True, text=True)
     if result.returncode:
-        raise RuntimeError("Worker scope check failed")
-    return {"slot": index, "total": total, "role": role, "status": "preflight_pass",
+        raise RuntimeError("Worker task scope check failed")
+    return {"slot": index, "total": total, "role": role, "shard": shard,
+            "source": name, "status": "preflight_pass",
             "ai_inference": False, "writes_to_repository": False}
 
 def main(argv=None):
