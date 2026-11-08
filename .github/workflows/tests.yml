@@ -30,3 +30,12 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Compile Python modules
         run: python -m compileall -q citerag tests tasks
+      - name: Verify real MiniLM embeddings and hybrid retrieval offline
+        env:
+          PYTHONPATH: .
+          CITERAG_MODEL_CACHE_DIR: ${{ runner.temp }}/citerag-models
+          HF_HUB_OFFLINE: "0"
+          CITERAG_OFFLINE: "1"
+        run: |
+          python -c 'from huggingface_hub import snapshot_download; import os; snapshot_download("sentence-transformers/all-MiniLM-L6-v2", revision="1110a243fdf4706b3f48f1d95db1a4f5529b4d41", cache_dir=os.environ["CITERAG_MODEL_CACHE_DIR"], allow_patterns=["*.json", "*.safetensors", "*.txt"])'
+          HF_HUB_OFFLINE=1 python tasks/verify-retrieval.py

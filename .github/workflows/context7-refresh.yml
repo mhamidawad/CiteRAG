@@ -2,16 +2,34 @@ name: Refresh Context7 Docs
 
 on:
   push:
-    branches:
-      - master # change to your default branch if different
+    branches: [main]
+    paths: ["docs/**", "README.md", "context7.json"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: context7-refresh
+  cancel-in-progress: true
 
 jobs:
   refresh:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
     steps:
-      - name: Trigger Context7 Refresh
+      - name: Trigger bounded documentation refresh when configured
+        env:
+          CONTEXT7_API_KEY: ${{ secrets.CONTEXT7_API_KEY }}
+          CITERAG_REPOSITORY: ${{ github.repository }}
         run: |
-          curl -s -X POST https://context7.com/api/v1/refresh \
+          if [ -z "$CONTEXT7_API_KEY" ]; then
+            echo "Documentation refresh skipped: no configured credential."
+            exit 0
+          fi
+          python3 -c 'import json, os; print(json.dumps({"libraryName": "/" + os.environ["CITERAG_REPOSITORY"]}))' > /tmp/context7-request.json
+          curl --fail --silent --show-error --connect-timeout 10 --max-time 60 \
+            -X POST https://context7.com/api/v1/refresh \
             -H "Content-Type: application/json" \
-            -H "Authorization: Bearer ${{ secrets.CONTEXT7_API_KEY }}" \
-            -d '{"libraryName": "/${{ github.repository }}"}'
+            -H "Authorization: Bearer $CONTEXT7_API_KEY" \
+            --data-binary @/tmp/context7-request.json --output /tmp/context7-response.json

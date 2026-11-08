@@ -21,16 +21,57 @@ jobs:
         run: |
           python3 tasks/scan-secrets.py
           python3 tasks/scan-secrets.py --history
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Install exact release dependency versions
+        run: python -m pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.lock.txt
+      - name: Test and compile the exact release source
+        run: |
+          python -m unittest discover -s tests -v
+          python -m compileall -q citerag tests tasks
+      - name: Verify real MiniLM embeddings and hybrid retrieval offline
+        env:
+          PYTHONPATH: .
+          CITERAG_MODEL_CACHE_DIR: ${{ runner.temp }}/citerag-models
+          HF_HUB_OFFLINE: "0"
+          CITERAG_OFFLINE: "1"
+        run: |
+          python -c 'from huggingface_hub import snapshot_download; import os; snapshot_download("sentence-transformers/all-MiniLM-L6-v2", revision="1110a243fdf4706b3f48f1d95db1a4f5529b4d41", cache_dir=os.environ["CITERAG_MODEL_CACHE_DIR"], allow_patterns=["*.json", "*.safetensors", "*.txt"])'
+          HF_HUB_OFFLINE=1 python tasks/verify-retrieval.py
+      - name: Audit pinned Python dependency advisories
+        run: |
+          mkdir -p release-evidence
+          python -m venv /tmp/citerag-audit
+          /tmp/citerag-audit/bin/pip install pip-audit==2.10.1
+          /tmp/citerag-audit/bin/pip-audit --vulnerability-service osv --disable-pip --no-deps -r requirements.lock.txt --format json --output release-evidence/dependency-audit.json
       - name: Build reviewed source on hosted runner
         env:
           IMAGE: ghcr.io/mhamidawad/citerag:sha-${{ github.sha }}
-        run: docker build --pull --tag "$IMAGE" .
+        run: docker build --pull --label "org.opencontainers.image.revision=${{ github.sha }}" --tag "$IMAGE" .
       - name: Verify nonroot, offline, read-only runtime
         env:
           IMAGE: ghcr.io/mhamidawad/citerag:sha-${{ github.sha }}
         run: |
           test "$(docker image inspect "$IMAGE" --format '{{.Config.User}}')" = "65532:65532"
           docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 128 --memory 3g --cpus 2 --tmpfs /tmp:rw,nosuid,size=64m "$IMAGE" python -c 'import citerag.web, citerag.server, lancedb, sentence_transformers; print("CITERAG_RELEASE_IMPORT_OK")'
+      - name: Scan candidate image before publishing
+        env:
+          IMAGE: ghcr.io/mhamidawad/citerag:sha-${{ github.sha }}
+        run: |
+          docker run --rm --network bridge \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD/release-evidence:/evidence" \
+            aquasec/trivy@sha256:6fa071ef8daa2e58b90cbf1710bedca91adbb3bf98693533226f442035b836a6 \
+            image --scanners vuln --severity HIGH,CRITICAL --exit-code 1 \
+            --timeout 10m --format json --output /evidence/image-audit.json "$IMAGE"
+      - name: Record source and image identity
+        env:
+          IMAGE: ghcr.io/mhamidawad/citerag:sha-${{ github.sha }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          printf '%s\n' "$SOURCE_SHA" > release-evidence/source-sha.txt
+          docker image inspect "$IMAGE" --format '{{.Id}}' > release-evidence/image-id.txt
       - name: Login to GHCR using scoped ephemeral token
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -42,6 +83,15 @@ jobs:
           docker push "$IMAGE"
           docker tag "$IMAGE" ghcr.io/mhamidawad/citerag:latest
           docker push ghcr.io/mhamidawad/citerag:latest
-          docker image inspect "$IMAGE" --format '{{json .RepoDigests}}'
+          docker image inspect "$IMAGE" --format '{{json .RepoDigests}}' > release-evidence/image-digests.json
+          cat release-evidence/image-digests.json
           docker logout ghcr.io
 
+      - name: Preserve release verification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-evidence-${{ github.sha }}
+          path: release-evidence/
+          if-no-files-found: warn
+          retention-days: 30
