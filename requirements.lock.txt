@@ -50,7 +50,7 @@ safetensors==0.8.0
 scikit-learn==1.9.1
 scipy==1.18.1
 sentence-transformers==5.1.1
-setuptools==78.1.0
+setuptools==84.1.0
 sse-starlette==3.6.0
 starlette==1.10.0
 sympy==1.14.0
