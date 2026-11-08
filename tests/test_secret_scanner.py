@@ -31,6 +31,11 @@ class SecretScannerTests(unittest.TestCase):
         self.assertTrue(self.mod.issues_for_line("docs/sample.md",runner))
         self.assertTrue(self.mod.issues_for_line(".github/workflows/tests.yml",runner+" # unexpected"))
 
+    def test_old_circleci_documentation_exact_line_exception(self):
+        line="The existing Supervisor still runs on `"+"moe"+"-instance`. This preflight"
+        self.assertFalse(self.mod.issues_for_line("docs/circleci-thirty-slots.md",line))
+        self.assertTrue(self.mod.issues_for_line("docs/sample.md",line))
+
     def test_history_audit_all_reachable_commits(self):
         self.assertEqual(self.mod.scan_history(),0)
 
