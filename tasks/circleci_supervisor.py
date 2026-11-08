@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Bounded CircleCI preflight controller. No model inference or agent execution."""
 import argparse
+from datetime import datetime, timezone
 import json
 import os
 import re
@@ -16,7 +17,7 @@ MAX_SLOTS = 20
 API = "https://circleci.com/api/v2/"
 TOKEN_FILE = Path.home() / ".config/citerag/circleci.env"
 ACTIVE = {"pending", "queued", "created", "running", "not_run", "on_hold", "blocked"}
-PRESENT = {"success", "failed", "error", "canceled", "cancelled", "failing"}
+PRESENT = {"success", "failed", "error", "errored", "canceled", "cancelled", "failing"}
 
 class GateError(RuntimeError):
     pass
@@ -84,10 +85,20 @@ def inspect(token, get=request):
             flows = w.get("items", [])
             if not isinstance(flows, list):
                 raise GateError("Invalid workflow list")
-            # Pipeline 'created' can have no workflows (empty config). Do not
-            # classify as idle until CircleCI updates the pipeline state.
+            # Pipeline state 'created' is not itself a running workflow in
+            # CircleCI. Parameters with run_workers=false create no workflow.
+            # Treat empty workflows as inactive only after a 10 minute settle
+            # period; malformed timestamps and unknown conditions block launch.
             if not flows:
-                active.append({"pipeline": p.get("number"), "state": state})
+                created = p.get("created_at")
+                try:
+                    when = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                    age = (datetime.now(timezone.utc) - when).total_seconds()
+                except (AttributeError, TypeError, ValueError):
+                    raise GateError("Pipeline timestamp unavailable") from None
+                if age < 600:
+                    active.append({"pipeline": p.get("number"), "state": state,
+                                   "reason": "empty workflow within settle period"})
             for item in flows:
                 st = item.get("status")
                 if st not in PRESENT:

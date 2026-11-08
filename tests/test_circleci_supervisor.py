@@ -3,6 +3,7 @@ import importlib.util
 import tempfile
 import unittest
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("circleci_supervisor", ROOT / "tasks/circleci_supervisor.py")
@@ -53,7 +54,20 @@ class ControllerTests(unittest.TestCase):
         with self.assertRaises(c.GateError):c.trigger("fake",getter)
         self.assertFalse(any(x[0]=="POST" for x in calls))
 
-    def test_created_pipeline_without_workflow_denies_dispatch(self):
+    def test_recent_created_pipeline_without_workflow_denies_dispatch(self):
+        now = datetime.now(timezone.utc).isoformat()
+        getter,calls=self.service([{"id":"p1","number":4,"state":"created",
+                                   "created_at":now}],[])
+        with self.assertRaises(c.GateError):c.trigger("fake",getter)
+
+    def test_stale_empty_workflow_and_errored_pipeline_are_terminal(self):
+        old = (datetime.now(timezone.utc)-timedelta(hours=1)).isoformat()
+        getter,calls=self.service([{"id":"p1","number":4,"state":"created",
+                                   "created_at":old},
+                                  {"id":"p2","number":5,"state":"errored"}],[])
+        self.assertTrue(c.inspect("fake",getter)["can_dispatch"])
+
+    def test_missing_timestamp_denies_dispatch(self):
         getter,calls=self.service([{"id":"p1","number":4,"state":"created"}],[])
         with self.assertRaises(c.GateError):c.trigger("fake",getter)
 
