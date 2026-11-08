@@ -16,6 +16,7 @@ from citerag.native import answer as native_answer
 from citerag.freshness import prepare_context
 from citerag.native_result import ABSTENTION,runtime_fingerprint,citation_and_claim_checks
 from citerag.quotes import verbatim_answer
+from citerag.auth import BearerAuth, validate_binding
 
 # Stable public adapter identifiers. Configuration is server-side only; no secret fields.
 ADAPTERS = {
@@ -162,6 +163,7 @@ async def job(request):
 
 
 app = Starlette(routes=[Route("/", home), Route("/api/health", health), Route("/api/adapters", adapters), Route("/api/context", context_status), Route("/api/ask", ask, methods=["POST"]), Route("/api/jobs/{job_id}", job)])
+app.add_middleware(BearerAuth, public_paths=("/api/health",))
 
 if __name__ == "__main__":
     import uvicorn

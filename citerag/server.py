@@ -3,6 +3,7 @@ import os
 from mcp.server.fastmcp import FastMCP
 from citerag.semantic import search, model
 from citerag.quotes import tool_payload
+from citerag.auth import BearerAuth, validate_binding
 mcp = FastMCP("citerag", host=os.getenv("CITERAG_MCP_HOST", "127.0.0.1"), port=int(os.getenv("CITERAG_MCP_PORT", "18761")))
 @mcp.tool()
 def rag_search(query: str, limit: int = 5) -> dict:
@@ -10,5 +11,11 @@ def rag_search(query: str, limit: int = 5) -> dict:
     rows=search(query,limit)
     return tool_payload(query,rows)
 if __name__=="__main__":
+    import uvicorn
+    host = os.getenv("CITERAG_MCP_HOST", "127.0.0.1")
+    validate_binding(host)
     model()
-    mcp.run(transport="streamable-http")
+    # Keep FastMCP's official ASGI lifespan and streamable-HTTP handler.
+    app = mcp.streamable_http_app()
+    app.add_middleware(BearerAuth)
+    uvicorn.run(app, host=host, port=int(os.getenv("CITERAG_MCP_PORT", "18761")), access_log=False)
