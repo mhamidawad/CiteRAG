@@ -1,0 +1,44 @@
+name: Publish CiteRAG GHCR release candidate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    # Only reviewed code from the default branch may publish an image.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Scan source and reachable history before packaging
+        run: |
+          python3 tasks/scan-secrets.py
+          python3 tasks/scan-secrets.py --history
+      - name: Build reviewed source on hosted runner
+        env:
+          IMAGE: ghcr.io/mhamidawad/citerag:sha-${{ github.sha }}
+        run: docker build --pull --tag "$IMAGE" .
+      - name: Verify nonroot, offline, read-only runtime
+        env:
+          IMAGE: ghcr.io/mhamidawad/citerag:sha-${{ github.sha }}
+        run: |
+          test "$(docker image inspect "$IMAGE" --format '{{.Config.User}}')" = "65532:65532"
+          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 128 --memory 3g --cpus 2 --tmpfs /tmp:rw,nosuid,size=64m "$IMAGE" python -c 'import citerag.web, citerag.server, lancedb, sentence_transformers; print("CITERAG_RELEASE_IMPORT_OK")'
+      - name: Login to GHCR using scoped ephemeral token
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Publish SHA-tagged image and record digest
+        env:
+          IMAGE: ghcr.io/mhamidawad/citerag:sha-${{ github.sha }}
+        run: |
+          docker push "$IMAGE"
+          docker image inspect "$IMAGE" --format '{{json .RepoDigests}}'
+          docker logout ghcr.io
