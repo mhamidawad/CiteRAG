@@ -6,7 +6,7 @@ This is **not** a 20-agent OpenCode inference executor.
 
 ## Control plane
 
-- Oracle `moe-instance` remains the OpenCode Supervisor host.
+- Oracle remains the OpenCode Supervisor host.
 - `tasks/circleci_supervisor.py status` queries the verified CircleCI project
   and refuses to infer idle status when API history or workflow state is incomplete.
 - `tasks/circleci_supervisor.py dispatch --confirm-readonly-20` explicitly

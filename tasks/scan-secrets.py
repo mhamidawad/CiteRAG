@@ -24,6 +24,8 @@ SAFE_LINE_HASHES = {
     (".github/workflows/tests.yml", "8696328bb3578e73007deb73951f192dd6d9e5894858a0998c4137ba59de553d"),
     ("tests/test_context.py", "37486930fd6cf97bf63d48df6d57cbc111d557a9a35b12d4893baf881fa5d829"),
     ("docs/circleci-thirty-slots.md", "12038242c9bcd10e272d6c5d38b44d1073231f32216ed64dd9e6f3192486ce45"),
+    # Historical documentation used the instance nickname (not a credential).
+    ("docs/circleci-supervisor-controller.md", "ad4a4bcbf3387d0a588dfda634681f4fd75131280310aa97d6817991581b2397"),
 }
 
 def issues_for_line(name, line):
