@@ -1,15 +1,9 @@
-# OFF by default: no automatic CircleCI consumption.
-# Trigger deploy with run_workers=true; trigger rollback with run_rollback=true.
+# Manual read-only worker acceptance. This config NEVER deploys or rolls back.
 version: 2.1
-
 parameters:
   run_workers:
     type: boolean
     default: false
-  run_rollback:
-    type: boolean
-    default: false
-
 jobs:
   supervisor_worker_preflight:
     docker:
@@ -27,101 +21,8 @@ jobs:
       - store_artifacts:
           path: /tmp/citerag-worker-result.json
           destination: worker-result.json
-
-  authorize_20_workers:
-    docker:
-      - image: cimg/python:3.12
-    resource_class: small
-    environment:
-      PYTHONDONTWRITEBYTECODE: "1"
-    steps:
-      - checkout
-      - run:
-          name: Verify 20-worker authorization and CircleCI token
-          command: |
-            test -n "${CIRCLE_TOKEN}" || { echo "CIRCLE_TOKEN is required"; exit 1; }
-            python tasks/circleci_worker.py --index 0 --total 20
-      - store_artifacts:
-          path: /tmp/citerag-worker-result.json
-          destination: authorize-20-worker-result.json
-
-  deploy_to_production:
-    docker:
-      - image: cimg/python:3.12
-    resource_class: small
-    environment:
-      PYTHONDONTWRITEBYTECODE: "1"
-    steps:
-      - checkout
-      - run:
-          name: Deploy CiteRAG to production
-          command: |
-            circleci run release plan \
-              --environment-name="production" \
-              --component-name="CiteRAG" \
-              --target-version="${CIRCLE_SHA1}"
-            # Insert your deployment steps here (e.g., docker push, helm upgrade, etc.)
-            circleci run release update --status=DEPLOYED
-      - store_artifacts:
-          path: /tmp/deploy-result.json
-          destination: deploy-result.json
-
-  validate_release:
-    docker:
-      - image: cimg/python:3.12
-    resource_class: small
-    environment:
-      PYTHONDONTWRITEBYTECODE: "1"
-    steps:
-      - checkout
-      - run:
-          name: Run release validation tests
-          command: |
-            python -m unittest discover -s tests -q
-            circleci run release update --status=SUCCESS
-      - store_artifacts:
-          path: /tmp/validation-result.json
-          destination: validation-result.json
-
-  rollback_release:
-    docker:
-      - image: cimg/python:3.12
-    resource_class: small
-    environment:
-      PYTHONDONTWRITEBYTECODE: "1"
-    steps:
-      - checkout
-      - run:
-          name: Rollback release to previous version
-          command: |
-            circleci run release rollback \
-              --environment-name="production" \
-              --component-name="CiteRAG"
-      - store_artifacts:
-          path: /tmp/rollback-result.json
-          destination: rollback-result.json
-
 workflows:
   manual_supervisor_preflight:
     when: << pipeline.parameters.run_workers >>
     jobs:
       - supervisor_worker_preflight
-
-  deploy_pipeline:
-    when: << pipeline.parameters.run_workers >>
-    jobs:
-      - supervisor_worker_preflight
-      - authorize_20_workers:
-          requires: [supervisor_worker_preflight]
-      - deploy_to_production:
-          requires: [authorize_20_workers]
-      - validate_release:
-          requires: [deploy_to_production]
-
-  production_rollback:
-    when: << pipeline.parameters.run_rollback >>
-    jobs:
-      - hold_rollback:
-          type: approval
-      - rollback_release:
-          requires: [hold_rollback]
