@@ -71,6 +71,41 @@ class ControllerTests(unittest.TestCase):
         getter,calls=self.service([{"id":"p1","number":4,"state":"created"}],[])
         with self.assertRaises(c.GateError):c.trigger("fake",getter)
 
+    def test_pagination_without_second_page_denies_dispatch(self):
+        getter,calls=self.service(fail="paginate")
+        with self.assertRaises((c.GateError, AssertionError)):c.trigger("fake",getter)
+
+    def test_paginated_history_is_checked(self):
+        calls=[]
+        old = (datetime.now(timezone.utc)-timedelta(hours=1)).isoformat()
+        def get(token,method,path,body=None):
+            calls.append(path)
+            if path=="me":return {"id":"safe"}
+            if path=="project/"+c.PROJECT:return {
+                "id":"92a7b55f-2fa6-4db1-88f2-7437c381c958","name":"supervisor"}
+            if path=="project/"+c.PROJECT+"/pipeline":
+                return {"items":[{"id":"p1","number":1,"state":"created",
+                                   "created_at":old}],"next_page_token":"page2"}
+            if path=="project/"+c.PROJECT+"/pipeline?page-token=page2":
+                return {"items":[{"id":"p2","number":2,"state":"errored"}]}
+            if path=="pipeline/p1/workflow":return {"items":[]}
+            raise AssertionError(path)
+        result=c.inspect("fake",get)
+        self.assertEqual(result["examined_pipelines"],2)
+        self.assertTrue(result["can_dispatch"])
+        self.assertIn("project/"+c.PROJECT+"/pipeline?page-token=page2",calls)
+
+    def test_repeated_pagination_token_fails_closed(self):
+        old=(datetime.now(timezone.utc)-timedelta(hours=1)).isoformat()
+        def get(token,method,path,body=None):
+            if path=="me":return {"id":"safe"}
+            if path=="project/"+c.PROJECT:return {
+                "id":"92a7b55f-2fa6-4db1-88f2-7437c381c958","name":"supervisor"}
+            if "/pipeline" in path:return {
+                "items":[{"id":"p1","state":"created","number":1,"created_at":old}],
+                "next_page_token":"repeat"}
+            raise AssertionError(path)
+        with self.assertRaises(c.GateError): c.inspect("fake",get)
     def test_pagination_denies_dispatch(self):
         getter,calls=self.service(fail="paginate")
         with self.assertRaises(c.GateError):c.trigger("fake",getter)

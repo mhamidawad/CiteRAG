@@ -8,6 +8,7 @@ This is **not** a 20-agent OpenCode inference executor.
 
 - Oracle remains the OpenCode Supervisor host.
 - `tasks/circleci_supervisor.py status` queries the verified CircleCI project
+  and scans up to five pages / 100 pipelines; unknown or incomplete state blocks dispatch.
   and refuses to infer idle status when API history or workflow state is incomplete.
 - `tasks/circleci_supervisor.py dispatch --confirm-readonly-20` explicitly
   requests **one** 20-way read-only preflight for the reviewed branch. It
@@ -52,3 +53,6 @@ The previously accepted personal API token began returning HTTP 401 for
 `/api/v2/me` and the exact project endpoint. No new CircleCI pipeline
 was started while these requests failed. A past workflow also surfaced
 a GitHub `error` check and needs job-level inspection before acceptance.
+
+The release controller targets the reviewed default `main` branch and is
+validated for CircleCI paginated history; it is not automatically scheduled.

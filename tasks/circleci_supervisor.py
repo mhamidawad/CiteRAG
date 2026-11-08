@@ -7,10 +7,12 @@ import os
 import re
 import sys
 import urllib.error
+from urllib.parse import quote
 import urllib.request
 from pathlib import Path
 
 PROJECT = "circleci/Kx8pciLC7qhz2rchu5dCCp/K7MgxSTs4WcZYBZn3MYSKh"
+BRANCH = "main"
 BRANCH = "feat/circleci-20-concurrency-cap-20261108"
 DEFINITION = "e4883277-27dc-4756-9494-1394cc7c497e"  # build-and-test
 MAX_SLOTS = 20
@@ -63,6 +65,31 @@ def verify_project(token, get=request):
 
 def inspect(token, get=request):
     verify_project(token, get)
+    # CircleCI paginates at 20 records. Scan each page, with hard bounds,
+    # instead of falsely treating every project past 20 runs as uninspectable.
+    entries = []
+    page = None
+    seen_tokens = set()
+    for _ in range(5):
+        path = "project/" + PROJECT + "/pipeline"
+        if page is not None:
+            path += "?page-token=" + quote(page, safe="")
+        data = get(token, "GET", path)
+        items = data.get("items")
+        if not isinstance(items, list) or len(items) > 50:
+            raise GateError("Malformed or oversized pipeline page")
+        entries.extend(items)
+        if len(entries) > 100:
+            raise GateError("Pipeline scan exceeds 100 entries")
+        next_page = data.get("next_page_token")
+        if not next_page:
+            break
+        if not isinstance(next_page, str) or next_page in seen_tokens:
+            raise GateError("Invalid CircleCI pagination token")
+        seen_tokens.add(next_page)
+        page = next_page
+    else:
+        raise GateError("More than five pages of pipeline history")
     data = get(token, "GET", "project/" + PROJECT + "/pipeline")
     entries = data.get("items", [])
     if not isinstance(entries, list):
