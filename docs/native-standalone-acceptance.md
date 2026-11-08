@@ -12,4 +12,4 @@ python tasks/verify-native.py --env-file /path/to/private-native.env --binary-di
 
 The runner checks host resource admission before executing Docker, uses only the configured project-scoped MCP search tool and a fixed free model, and saves a sanitized JSONL trace and verification report in a per-run directory. Verification requires a real native tool event, approved source path and chunk ID, and a supported verbatim claim. An exit code, a historical trace, or a successful model-only response is not production certification.
 
-A missing scoped credential or reviewed binary, unsafe permissions, timeout, denied MCP access, unsupported claims, or other unexpected tool use must fail closed. Backend identity attestation, CircleCI cloud-worker evidence, and the production web-adapter integration remain independent gates.
+A missing scoped credential or reviewed binary, unsafe permissions, timeout, denied MCP access, unsupported claims, or other unexpected tool use must fail closed. Backend identity attestation, GitHub Actions worker acceptance evidence, and the production web-adapter integration remain independent gates.

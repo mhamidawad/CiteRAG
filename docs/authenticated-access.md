@@ -43,7 +43,7 @@ it is not a readiness or security certification endpoint.
 Transport encryption / trusted private network or reverse proxy; token
 provisioning and rotation; per-workspace authorization; rate limits;
 security review; bounded inference model costs; secret scanning; service
-upgrade and rollback acceptance; and actual CircleCI 20-cloud-job execution.
+upgrade and rollback acceptance; and actual manual GitHub Actions read-only worker preflight.
 
 Do not claim complete production authorization from bearer authentication
 alone. Do not expose these endpoints publicly until the above controls pass.

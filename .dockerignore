@@ -1,6 +1,5 @@
 .git
 .github
-.circleci
 .env
 .env.*
 **/.env
