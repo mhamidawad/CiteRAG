@@ -45,6 +45,15 @@ jobs:
           python -m venv /tmp/citerag-audit
           /tmp/citerag-audit/bin/pip install pip-audit==2.10.1
           /tmp/citerag-audit/bin/pip-audit --vulnerability-service osv --disable-pip --no-deps -r requirements.lock.txt --format json --output release-evidence/dependency-audit.json
+      - name: Verify pinned vendor backport evidence
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python tasks/fetch-vendor-vex.py
+      - name: Authenticate to free hardened base registry
+        env:
+          DHI_USERNAME: ${{ secrets.DHI_USERNAME }}
+          DHI_TOKEN: ${{ secrets.DHI_TOKEN }}
+        run: printf '%s' "$DHI_TOKEN" | docker login dhi.io -u "$DHI_USERNAME" --password-stdin
       - name: Build reviewed source on hosted runner
         env:
           IMAGE: ghcr.io/mhamidawad/citerag:sha-${{ github.sha }}
@@ -55,16 +64,13 @@ jobs:
         run: |
           test "$(docker image inspect "$IMAGE" --format '{{.Config.User}}')" = "65532:65532"
           docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 128 --memory 3g --cpus 2 --tmpfs /tmp:rw,nosuid,size=64m "$IMAGE" python -c 'import citerag.web, citerag.server, lancedb, sentence_transformers; print("CITERAG_RELEASE_IMPORT_OK")'
-      - name: Scan candidate image before publishing
+      - name: Scan raw image and enforce exact-product vendor dispositions
         env:
           IMAGE: ghcr.io/mhamidawad/citerag:sha-${{ github.sha }}
         run: |
-          docker run --rm --network bridge \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            -v "$PWD/release-evidence:/evidence" \
-            aquasec/trivy@sha256:6fa071ef8daa2e58b90cbf1710bedca91adbb3bf98693533226f442035b836a6 \
-            image --scanners vuln --severity HIGH,CRITICAL --exit-code 1 \
-            --timeout 10m --format json --output /evidence/image-audit.json "$IMAGE"
+          mkdir -p "$RUNNER_TEMP/trivy-cache"
+          docker run --rm --network bridge             -v /var/run/docker.sock:/var/run/docker.sock             -v "$PWD/release-evidence:/evidence"             -v "$RUNNER_TEMP/trivy-cache:/root/.cache/trivy"             aquasec/trivy@sha256:6fa071ef8daa2e58b90cbf1710bedca91adbb3bf98693533226f442035b836a6             image --scanners vuln --severity HIGH,CRITICAL --exit-code 0             --timeout 10m --format json --output /evidence/image-audit-raw.json "$IMAGE"
+          docker run --rm --network bridge             -v /var/run/docker.sock:/var/run/docker.sock             -v "$PWD/release-evidence:/evidence"             -v "$RUNNER_TEMP/trivy-cache:/root/.cache/trivy"             aquasec/trivy@sha256:6fa071ef8daa2e58b90cbf1710bedca91adbb3bf98693533226f442035b836a6             image --scanners vuln --severity HIGH,CRITICAL --exit-code 1             --vex /evidence/dhi-python-exact.vex.json             --timeout 10m --format json --output /evidence/image-audit.json "$IMAGE"
       - name: Record source and image identity
         env:
           IMAGE: ghcr.io/mhamidawad/citerag:sha-${{ github.sha }}
