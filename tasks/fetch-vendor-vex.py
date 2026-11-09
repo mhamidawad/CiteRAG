@@ -20,23 +20,6 @@ def validate_pin(pin):
         raise ValueError("Unapproved vendor source")
     return sha
 
-def exact_products(document):
-    if document.get("author") != "Docker Hardened Images <dhi@docker.com>":
-        raise ValueError("Unexpected vendor author")
-    statements = []
-    for statement in document.get("statements", []):
-        if statement.get("status") not in {"not_affected", "fixed"}:
-            continue
-        products = [product for product in statement.get("products", [])
-                    if re.fullmatch(r"pkg:deb/debian/[A-Za-z0-9.+_-]+@[^?\s]+(?:\?[^\s]+)?",
-                                    product.get("@id", ""))]
-        if products:
-            statements.append({**statement, "products": products})
-    if not statements:
-        raise ValueError("No exact versioned product evidence")
-    return {**document, "@id": document["@id"] + "#exact-versioned-debian-products",
-            "author": "CiteRAG deterministic vendor-document subset",
-            "upstream_author": document["author"], "statements": statements}
 
 def fetch(output):
     pin = json.loads((ROOT / "security/dhi-vex-source.json").read_text())
@@ -56,15 +39,14 @@ def fetch(output):
     if hashlib.sha256(body).hexdigest() != pin["sha256"]:
         raise ValueError("Vendor document digest mismatch")
     document = json.loads(body)
-    filtered = exact_products(document)
+    if document.get("author") != "Docker Hardened Images <dhi@docker.com>":
+        raise ValueError("Unexpected vendor author")
     output.mkdir(parents=True, exist_ok=True)
     (output / "dhi-python-vendor.vex.json").write_bytes(body)
-    (output / "dhi-python-exact.vex.json").write_text(json.dumps(filtered, indent=2) + "\n")
     (output / "vendor-vex-provenance.json").write_text(json.dumps(
-        {**pin, "git_signature_verified": True, "selection": "exact versioned Debian PURLs only",
-         "statements_retained": len(filtered["statements"]),
-         "statement_statuses_changed": False}, indent=2) + "\n")
-    return len(filtered["statements"])
+        {**pin, "git_signature_verified": True, "selection": "raw signed vendor document; exact PURLs derived only against Trivy scan output",
+         "vendor_statements": len(document.get("statements", []))}, indent=2) + "\n")
+    return len(document.get("statements", []))
 
 if __name__ == "__main__":
     count = fetch(ROOT / "release-evidence")
