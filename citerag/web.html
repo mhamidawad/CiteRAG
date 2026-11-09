@@ -1,36 +1,201 @@
 <!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CiteRAG</title><style>
-:root{color-scheme:dark;font:16px system-ui;background:#101616;color:#edf4ee}*{box-sizing:border-box}body{margin:0}main{max-width:1000px;margin:auto;padding:42px 22px}header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #31433b;padding-bottom:24px}.brand{font-weight:800;letter-spacing:.12em}.badge{color:#bbf49a;border:1px solid #3b583f;padding:7px 12px;border-radius:30px;font-size:13px}.eyebrow{color:#a8bead;font-size:13px;letter-spacing:.16em;margin-top:46px}h1{font-size:clamp(36px,6vw,62px);letter-spacing:-.05em;line-height:1.08;max-width:700px;margin:16px 0}p{color:#b0c2b7;line-height:1.6}.panel{background:#19231f;border:1px solid #35483c;border-radius:20px;padding:25px;margin-top:28px}label{display:block;font-weight:600;margin-bottom:12px}textarea{width:100%;resize:vertical;min-height:108px;background:#111a16;border:1px solid #455b4b;border-radius:12px;color:#f1f5ee;font:inherit;padding:16px}textarea:focus{outline:2px solid #b7ed91}button{font:inherit;cursor:pointer;border:0;border-radius:10px;padding:12px 20px;font-weight:650;background:#c6f795;color:#182515}button:disabled{opacity:.5;cursor:wait}.row{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin-top:18px}.check{display:flex;font-size:14px;font-weight:400;margin:0;gap:8px;color:#b5c5b9}.examples{display:flex;gap:10px;flex-wrap:wrap;margin:15px 0}.examples button{background:transparent;border:1px solid #3c5143;color:#c2d0c5;font-size:13px;padding:9px 12px}.answer{white-space:pre-wrap;line-height:1.7;font-size:17px;overflow-wrap:anywhere}.source{background:#111a16;border-radius:10px;padding:15px;margin-top:15px;font-size:14px;overflow-wrap:anywhere}.source pre{white-space:pre-wrap;line-height:1.5;color:#b6c6b8}.muted{color:#99b19e;font-size:13px}#status{min-height:24px;color:#c6f795}footer{margin-top:30px;font-size:13px;color:#8da596}h2{margin:0 0 14px;font-size:20px}a{color:#c6f795}
-</style><main><header><div class="brand">CiteRAG</div><span class="badge" id="health">Connecting…</span></header><div class="eyebrow">YOUR DOCUMENTS. LOCAL KNOWLEDGE.</div><h1>Ask your project.<br>See the evidence.</h1><p>Search approved project documentation with local embeddings and inspect source citations. Optional generating adapters remain disabled until their backend is verified.</p><div class="panel"><h2>Project context</h2><p id="context-status">Loading indexed source coverage…</p><p class="muted" id="context-scope"></p><a href="https://github.com/mhamidawad/CiteRAG/blob/main/docs/architecture.md" target="_blank" rel="noopener noreferrer">Architecture documentation</a></div><form class="panel" id="form"><label for="agent-adapter">Agent / execution adapter</label><select id="agent-adapter" disabled aria-describedby="adapter-help"><option value="">Checking available adapters…</option></select><p class="muted" id="adapter-help">Adapter choices come from this server. Generation requires server-side credentials and a verified backend; no secrets are stored in your browser.</p><label for="question">What would you like to know?</label><textarea id="question" maxlength="4000" required>Which vector database and embedding model does this project use?</textarea><div class="examples"><button type="button" data-q="Where are generation requests routed?">Model routing</button><button type="button" data-q="What documents can be indexed?">Approved documents</button></div><div class="row"><button id="submit" type="submit">Ask with evidence ↗</button></div><p class="muted">One request at a time. Native OpenCode requests have a bounded display deadline. Failed jobs are not resubmitted automatically. OpenCode may retry internally within its execution deadline.</p><div id="status" role="status" aria-live="polite"></div></form><section class="panel" id="result" hidden><h2 id="heading">Answer</h2><div class="answer" id="answer"></div><div id="sources"></div><p class="muted" id="timing"></p></section><footer>LanceDB · all-MiniLM-L6-v2 · OmniRoute (optional) · CPU retrieval<br>Adapter integration is in development. Only verified server results are displayed.</footer></main><script>
+:root{color-scheme:dark;font:16px system-ui;background:#101616;color:#edf4ee}*{box-sizing:border-box}body{margin:0}main{max-width:1000px;margin:auto;padding:42px 22px}header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #31433b;padding-bottom:24px}.brand{font-weight:800;letter-spacing:.12em}.badge{color:#bbf49a;border:1px solid #3b583f;padding:7px 12px;border-radius:30px;font-size:13px}.eyebrow{color:#a8bead;font-size:13px;letter-spacing:.16em;margin-top:46px}h1{font-size:clamp(36px,6vw,62px);letter-spacing:-.05em;line-height:1.08;max-width:700px;margin:16px 0}p{color:#b0c2b7;line-height:1.6}.panel{background:#19231f;border:1px solid #35483c;border-radius:20px;padding:25px;margin-top:28px}label{display:block;font-weight:600;margin-bottom:12px}textarea{width:100%;resize:vertical;min-height:108px;background:#111a16;border:1px solid #455b4b;border-radius:12px;color:#f1f5ee;font:inherit;padding:16px}textarea:focus{outline:2px solid #b7ed91}button{font:inherit;cursor:pointer;border:0;border-radius:10px;padding:12px 20px;font-weight:650;background:#c6f795;color:#182515}button:disabled{opacity:.5;cursor:wait}.row{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin-top:18px}.check{display:flex;font-size:14px;font-weight:400;margin:0;gap:8px;color:#b5c5b9}.examples{display:flex;gap:10px;flex-wrap:wrap;margin:15px 0}.examples button{background:transparent;border:1px solid #3c5143;color:#c2d0c5;font-size:13px;padding:9px 12px}.answer{white-space:pre-wrap;line-height:1.7;font-size:17px;overflow-wrap:anywhere}.source{background:#111a16;border-radius:10px;padding:15px;margin-top:15px;font-size:14px;overflow-wrap:anywhere}.source pre{white-space:pre-wrap;line-height:1.5;color:#b6c6b8}.muted{color:#99b19e;font-size:13px}#status{min-height:24px;color:#c6f795}footer{margin-top:30px;font-size:13px;color:#8da596}h2{margin:0 0 14px;font-size:20px}a{color:#c6f795}select{max-width:100%;padding:12px;background:#111a16;color:#edf4ee;border:1px solid #455b4b;border-radius:10px;font:inherit;margin-bottom:20px}button:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid #b7ed91;outline-offset:3px}dl{display:grid;grid-template-columns:minmax(120px,1fr) 2fr;gap:12px;margin:0}dt{color:#b0c2b7}dd{margin:0;overflow-wrap:anywhere}@media(max-width:500px){main{padding:24px 16px}.panel{padding:18px}header{gap:12px}dl{grid-template-columns:1fr}dd{margin-bottom:12px}}
+</style><main><header><div class="brand">CiteRAG</div><span class="badge" id="health">Connecting…</span></header><div class="eyebrow">YOUR DOCUMENTS. LOCAL KNOWLEDGE.</div><h1>Ask your project.<br>See the evidence.</h1><p>Search approved project documentation with local embeddings and inspect source citations. Optional generating adapters remain disabled until their backend is verified.</p><div class="panel"><h2>Project context</h2><p id="context-status">Loading indexed source coverage…</p><p class="muted" id="context-scope"></p><p class="muted">Source ingestion and workspace permissions are managed on the server. This view shows only the coverage reported for your current service.</p><a href="https://github.com/mhamidawad/CiteRAG/blob/main/docs/architecture.md" target="_blank" rel="noopener noreferrer">Architecture documentation</a></div><section class="panel" aria-labelledby="source-heading"><h2 id="source-heading">Approved repository sources</h2><p class="muted" id="workspace-status">Checking authorized workspace…</p><div id="source-inventory"></div><div class="row"><button type="button" id="reindex-sources" disabled>Reindex approved sources</button></div><p class="muted" id="source-status" role="status" aria-live="polite">Repository locations are configured by the server operator. Reindexing refreshes the approved source set; this form cannot add paths.</p></section><section class="panel" aria-labelledby="diagnostics-heading"><h2 id="diagnostics-heading">Connection diagnostics</h2><dl><dt>HTTP service</dt><dd id="diag-service">Checking…</dd><dt>Retrieval index</dt><dd id="diag-index">Checking…</dd><dt>Generation</dt><dd id="diag-generation">Checking…</dd><dt>Native OpenCode</dt><dd id="diag-native">Checking…</dd><dt>Request state</dt><dd id="diag-busy">Checking…</dd></dl><div class="row"><button type="button" id="refresh-diagnostics">Refresh status</button><button type="button" id="export-settings" disabled>Export preferences</button></div><p class="muted" id="diagnostics-status" role="status" aria-live="polite">Liveness alone does not certify retrieval or agent integration.</p></section><form class="panel" id="form"><label for="agent-adapter">Agent / execution adapter</label><select id="agent-adapter" disabled aria-describedby="adapter-help"><option value="">Checking available adapters…</option></select><p class="muted" id="adapter-help">Adapter choices come from this server. Generation requires server-side credentials and a verified backend; no secrets are stored in your browser.</p><label for="question">What would you like to know?</label><textarea id="question" maxlength="4000" required>Which vector database and embedding model does this project use?</textarea><div class="examples"><button type="button" data-q="Where are generation requests routed?">Model routing</button><button type="button" data-q="What documents can be indexed?">Approved documents</button></div><div class="row"><button id="submit" type="submit">Ask with evidence ↗</button></div><p class="muted">One request at a time. Native OpenCode requests have a bounded display deadline. Failed jobs are not resubmitted automatically. OpenCode may retry internally within its execution deadline.</p><div id="status" role="status" aria-live="polite"></div></form><section class="panel" id="result" hidden><h2 id="heading">Answer</h2><div class="answer" id="answer"></div><div id="sources"></div><p class="muted" id="timing"></p></section><footer>LanceDB · all-MiniLM-L6-v2 · OmniRoute (optional) · CPU retrieval<br>Adapter integration is in development. Only verified server results are displayed.</footer></main><script>
+
 const $=id=>document.getElementById(id);
 const adapterSelect=$('agent-adapter');
 const submitButton=$('submit');
+let registryReady=false;
+let requestRunning=false;
+let sourcesReady=false;
+let availableAdapters=[];
 submitButton.disabled=true;
-fetch('/api/adapters').then(async response=>{
-  if(!response.ok)throw Error('Adapter registry unavailable');
-  const info=await response.json();
-  const items=Array.isArray(info.adapters)?info.adapters.filter(item=>typeof item.name==='string'):[];
-  const values=items.filter(item=>item.available===true).map(item=>item.name);
-  if(!values.length)throw Error('No verified adapters available');
-  adapterSelect.replaceChildren();
-  for(const item of items){
-    const option=document.createElement('option');
-    option.value=item.name;
-    option.disabled=item.available!==true;
-    option.textContent=item.name+(option.disabled?' (unavailable: '+(item.status||'unverified')+')':'');
-    adapterSelect.appendChild(option);
-  }
-  let saved=null;
-  try{saved=localStorage.getItem('citerag-adapter')}catch(_){}
-  adapterSelect.value=values.includes(saved)?saved:(values.includes('retrieval-only')?'retrieval-only':values[0]);
-  adapterSelect.disabled=false;
-  submitButton.disabled=false;
-}).catch(()=>{
-  adapterSelect.disabled=true;
-  submitButton.disabled=true;
-  $('status').textContent='Adapter registry unavailable; no request will be sent.';
-});
+async function api(path,options={},timeoutMs=15000){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),timeoutMs);
+  try{
+    const response=await fetch(path,{...options,signal:controller.signal,credentials:'same-origin',cache:'no-store'});
+    let data;
+    try{data=await response.json()}catch(_){throw Error('The server returned an invalid response.')}
+    if(!response.ok){
+      if(response.status===401)throw Error('Authentication required. Open this dashboard through your authorized private access route.');
+      if(response.status===403)throw Error('Your current access does not permit this operation.');
+      if(response.status===429)throw Error('Request limit reached. Wait before sending another request.');
+      throw Error(typeof data.error==='string'?data.error:'Request failed (HTTP '+response.status+').');
+    }
+    return data;
+  }catch(error){
+    if(error.name==='AbortError')throw Error('The server response timed out. No retry was sent.');
+    throw error;
+  }finally{clearTimeout(timer)}
+}
+function syncControls(){
+  submitButton.disabled=!registryReady||requestRunning;
+  adapterSelect.disabled=!registryReady||requestRunning;
+  $('export-settings').disabled=!registryReady;
+  $('reindex-sources').disabled=!sourcesReady||requestRunning;
+}
+async function loadAdapters(){
+  try{
+    const info=await api('/api/adapters');
+    const items=Array.isArray(info.adapters)?info.adapters.filter(item=>item&&typeof item.name==='string'):[];
+    availableAdapters=items.filter(item=>item.available===true).map(item=>item.name);
+    if(!availableAdapters.length)throw Error('No verified adapters are available.');
+    adapterSelect.replaceChildren();
+    for(const item of items){
+      const option=document.createElement('option');
+      option.value=item.name;
+      option.disabled=item.available!==true;
+      option.textContent=item.name+(option.disabled?' (unavailable: '+(item.status||'unverified')+')':'');
+      adapterSelect.appendChild(option);
+    }
+    let saved=null;
+    try{saved=localStorage.getItem('citerag-adapter')}catch(_){}
+    adapterSelect.value=availableAdapters.includes(saved)?saved:(availableAdapters.includes('retrieval-only')?'retrieval-only':availableAdapters[0]);
+    registryReady=true;
+  }catch(error){
+    registryReady=false;
+    $('status').textContent=error.message+' No request will be sent.';
+  }finally{syncControls()}
+}
 adapterSelect.addEventListener('change',()=>{
   try{localStorage.setItem('citerag-adapter',adapterSelect.value)}catch(_){}
-});fetch('/api/health').then(r=>r.json()).then(d=>{$('health').textContent=d.status==='ok'?'● Local service online':'Service unavailable'}).catch(()=>{$('health').textContent='Service unavailable'});document.querySelectorAll('[data-q]').forEach(b=>b.onclick=()=>{$('question').value=b.dataset.q;$('question').focus()});function loadContext(){return fetch('/api/context').then(r=>r.json()).then(d=>{$('context-status').textContent=d.imported_documents+' imported documents · '+d.selected_sessions+' selected sessions · '+d.imported_messages+' recovered messages · '+d.indexed_chunks+' indexed chunks';$('context-scope').textContent=d.coverage+' · Freshness: '+(d.freshness.status||'unknown')+' · Last successful ingestion: '+(d.last_successful_ingestion||'not available')+' · Native agent: '+d.native_opencode+' · Project: '+d.phase+' · Last sync: '+(d.last_sync||'not yet synced')}).catch(()=>{$('context-status').textContent='Context coverage unavailable'});}loadContext();const wait=ms=>new Promise(r=>setTimeout(r,ms));
-$('form').onsubmit=async e=>{e.preventDefault();$('submit').disabled=true;$('result').hidden=true;$('status').textContent='Retrieving project evidence…';try{let r=await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:$('question').value,adapter:$('agent-adapter').value})});let d=await r.json();if(!r.ok)throw Error(d.error||'Request failed');const until=Date.now()+510000;while(Date.now()<until){await wait(1500);r=await fetch('/api/jobs/'+encodeURIComponent(d.job_id));const j=await r.json();if(!r.ok)throw Error(j.error||'Request unavailable');if(j.state==='running'){$('status').textContent=adapterSelect.value==='retrieval-only'?'Searching documents…':'Generating from retrieved evidence…';continue}if(j.state!=='completed')throw Error(j.detail||j.error||'The model did not return a complete answer. Try document search only.');$('heading').textContent=j.status==='insufficient_evidence'?'Insufficient evidence':j.mode==='retrieval_only'?'Retrieved evidence':j.mode==='native_opencode'?'OpenCode answer':'Answer';$('answer').textContent=j.answer||'Matching source excerpts are shown below.';$('sources').replaceChildren();for(const s of j.evidence||[]){const box=document.createElement('div');box.className='source';const title=document.createElement('strong');title.textContent=s.source;const id=document.createElement('p');id.className='muted';id.textContent='Chunk '+s.id;const text=document.createElement('pre');text.textContent=s.text;box.append(title,id,text);$('sources').append(box)}$('timing').textContent=(j.elapsed_ms/1000).toFixed(1)+' seconds · '+(j.model||'Local semantic search')+(j.grounding_contract?' · Verbatim evidence checked':'');$('result').hidden=false;$('status').textContent='Complete.';loadContext();return}throw Error('The display deadline was reached. No retry was sent.')}catch(err){$('status').textContent=err.message}finally{$('submit').disabled=false}};
+});
+function showValue(value){return value===undefined||value===null?'Not reported':String(value)}
+async function loadSources(){
+  try{
+    const data=await api('/api/sources');
+    if(!Array.isArray(data.sources))throw Error('The source inventory response is invalid.');
+    $('workspace-status').textContent='Workspace: '+showValue(data.workspace)+' · Source configuration: '+showValue(data.management);
+    $('source-inventory').replaceChildren();
+    if(!data.sources.length){
+      const empty=document.createElement('p');empty.className='muted';
+      empty.textContent='No repository sources are configured. Approved project documents may still be indexed.';
+      $('source-inventory').appendChild(empty);
+    }
+    for(const source of data.sources){
+      const row=document.createElement('div');row.className='source';
+      const title=document.createElement('strong');title.textContent=showValue(source.name);
+      const detail=document.createElement('p');detail.className='muted';
+      detail.textContent='State: '+showValue(source.state)+(Number.isInteger(source.documents)?' · '+source.documents+' eligible files':'')+(Number.isInteger(source.excluded)?' · '+source.excluded+' excluded files':'')+(source.revision?' · Revision: '+source.revision:'');
+      row.append(title,detail);$('source-inventory').appendChild(row);
+    }
+    sourcesReady=true;
+  }catch(error){
+    sourcesReady=false;
+    $('workspace-status').textContent='Source inventory unavailable';
+    $('source-inventory').replaceChildren();
+    $('source-status').textContent=error.message;
+  }finally{syncControls()}
+}
+async function loadHealth(){
+  try{
+    const data=await api('/api/health');
+    $('health').textContent=data.status==='ok'?'● HTTP service online':'Service unavailable';
+    $('diag-service').textContent=showValue(data.status)+(data.status_scope?' · '+data.status_scope:'');
+    $('diag-index').textContent=showValue(data.retrieval_index);
+    $('diag-generation').textContent=showValue(data.generation);
+    $('diag-native').textContent=showValue(data.native_opencode);
+    $('diag-busy').textContent=typeof data.busy==='boolean'?(data.busy?'Busy':'Idle'):'Not reported';
+  }catch(error){
+    $('health').textContent='Service unavailable';
+    for(const id of ['diag-service','diag-index','diag-generation','diag-native','diag-busy'])$(id).textContent='Unavailable';
+    $('diagnostics-status').textContent=error.message;
+  }
+}
+async function loadContext(){
+  try{
+    const data=await api('/api/context');
+    $('context-status').textContent=showValue(data.imported_documents)+' imported documents · '+showValue(data.selected_sessions)+' selected sessions · '+showValue(data.imported_messages)+' recovered messages · '+showValue(data.indexed_chunks)+' indexed chunks';
+    $('context-scope').textContent=(data.coverage||'Coverage not reported')+' · Freshness: '+(data.freshness?.status||'unknown')+' · Last successful ingestion: '+(data.last_successful_ingestion||'not available')+' · Native agent: '+showValue(data.native_opencode)+' · Project: '+showValue(data.phase)+' · Last sync: '+(data.last_sync||'not reported');
+  }catch(error){
+    $('context-status').textContent='Context coverage unavailable';
+    $('context-scope').textContent=error.message;
+  }
+}
+$('refresh-diagnostics').onclick=async()=>{
+  $('refresh-diagnostics').disabled=true;
+  $('diagnostics-status').textContent='Refreshing server reports…';
+  await Promise.all([loadHealth(),loadContext(),loadAdapters(),loadSources()]);
+  $('refresh-diagnostics').disabled=false;
+  if($('diagnostics-status').textContent==='Refreshing server reports…')$('diagnostics-status').textContent='Refresh complete. Liveness alone does not certify retrieval or agent integration.';
+};
+$('reindex-sources').onclick=async()=>{
+  if(!sourcesReady||requestRunning)return;
+  requestRunning=true;syncControls();
+  $('source-status').textContent='Reindexing approved sources…';
+  try{
+    const data=await api('/api/reindex',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    if(typeof data.job_id!=='string'||!data.job_id)throw Error('The server did not return a reindex request identifier.');
+    const until=Date.now()+120000;
+    while(Date.now()<until){
+      await wait(1500);
+      const job=await api('/api/jobs/'+encodeURIComponent(data.job_id),{},Math.max(1,Math.min(15000,until-Date.now())));
+      if(job.state==='running')continue;
+      if(job.state!=='completed'||job.status==='failed')throw Error(job.detail||job.error||'Reindexing did not complete.');
+      $('source-status').textContent='Reindex complete. Source coverage below reflects the latest server reports.';
+      await Promise.all([loadSources(),loadContext(),loadHealth()]);
+      return;
+    }
+    throw Error('The reindex display deadline was reached. No retry was sent; the server job may still be running.');
+  }catch(error){$('source-status').textContent=error.message}
+  finally{requestRunning=false;syncControls()}
+};
+function exportedPreferences(){
+  if(!registryReady||!availableAdapters.includes(adapterSelect.value))throw Error('Choose an available adapter before exporting.');
+  return {format:'citerag-dashboard-preferences',version:1,adapter:adapterSelect.value};
+}
+$('export-settings').onclick=()=>{
+  try{
+    const content=JSON.stringify(exportedPreferences(),null,2)+'\n';
+    const url=URL.createObjectURL(new Blob([content],{type:'application/json'}));
+    const link=document.createElement('a');
+    link.href=url;link.download='citerag-preferences.json';link.click();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+    $('diagnostics-status').textContent='Exported adapter preference only. Credentials, questions, answers and sources are excluded.';
+  }catch(error){$('diagnostics-status').textContent=error.message}
+};
+document.querySelectorAll('[data-q]').forEach(button=>button.onclick=()=>{
+  $('question').value=button.dataset.q;$('question').focus();
+});
+const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+$('form').onsubmit=async event=>{
+  event.preventDefault();
+  if(!registryReady||requestRunning||!availableAdapters.includes(adapterSelect.value))return;
+  const selectedAdapter=adapterSelect.value;
+  requestRunning=true;syncControls();
+  $('result').hidden=true;
+  $('status').textContent='Retrieving project evidence…';
+  try{
+    const data=await api('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:$('question').value,adapter:selectedAdapter})});
+    if(typeof data.job_id!=='string'||!data.job_id)throw Error('The server did not return a request identifier.');
+    const until=Date.now()+510000;
+    while(Date.now()<until){
+      await wait(1500);
+      const job=await api('/api/jobs/'+encodeURIComponent(data.job_id),{},Math.max(1,Math.min(15000,until-Date.now())));
+      if(job.state==='running'){
+        $('status').textContent=selectedAdapter==='retrieval-only'?'Searching documents…':'Generating from retrieved evidence…';
+        continue;
+      }
+      if(job.state!=='completed')throw Error(job.detail||job.error||'The model did not return a complete answer.');
+      $('heading').textContent=job.status==='insufficient_evidence'?'Insufficient evidence':job.mode==='retrieval_only'?'Retrieved evidence':job.mode==='native_opencode'?'OpenCode answer':'Answer';
+      $('answer').textContent=job.answer||'Matching source excerpts are shown below.';
+      $('sources').replaceChildren();
+      for(const source of Array.isArray(job.evidence)?job.evidence:[]){
+        const box=document.createElement('div');box.className='source';
+        const title=document.createElement('strong');title.textContent=source.source;
+        const id=document.createElement('p');id.className='muted';id.textContent='Chunk '+source.id;
+        const text=document.createElement('pre');text.textContent=source.text;
+        box.append(title,id,text);$('sources').append(box);
+      }
+      $('timing').textContent=(Number.isFinite(job.elapsed_ms)?(job.elapsed_ms/1000).toFixed(1)+' seconds':'Timing not reported')+' · '+(job.model||'Local semantic search')+(job.grounding_contract?' · Verbatim evidence checked':'');
+      $('result').hidden=false;$('status').textContent='Complete.';
+      await Promise.all([loadContext(),loadHealth()]);
+      return;
+    }
+    throw Error('The display deadline was reached. No retry was sent.');
+  }catch(error){$('status').textContent=error.message}
+  finally{requestRunning=false;syncControls()}
+};
+loadAdapters();loadHealth();loadContext();loadSources();
 </script></html>

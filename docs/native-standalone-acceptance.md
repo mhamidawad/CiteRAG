@@ -1,15 +1,28 @@
 # Bounded standalone OpenCode acceptance
 
-The operator-only `tasks/verify-native.py` runner is a fail-closed acceptance probe, not a production web service or deployment authorization. It launches one disposable, non-root, read-only OpenCode container with one permitted CiteRAG MCP tool. Model inference routes through the reviewed free local OmniRoute model and is bounded by a hard deadline. Offline unit tests never start a model.
+The operator-only `tasks/verify-native.py` runner launches one disposable nonroot read-only OpenCode container, permits only CiteRAG MCP retrieval and routes inference through the reviewed free/local OmniRoute model. A resource gate and hard deadline bound each attempt. Offline unit tests do not start a model.
 
-Provision a separate owner-only environment file (mode 0600) containing valid `CITERAG_API_TOKEN` and `CITERAG_OMNIROUTE_API_KEY` entries. Credentials must be provisioned by an authorized issuer. Never commit or print them, and do not extract or copy secrets from existing production services.
+Provision a separate owner-only environment file containing authorized `CITERAG_API_TOKEN` and `CITERAG_OMNIROUTE_API_KEY` entries. Never commit, print or extract production secrets. Select the reviewed OpenCode binary directory and the authenticated loopback MCP endpoint.
 
-Select a reviewed, pinned OpenCode binary directory and run:
+A known-fact certification probe must include an expected answer term:
 
 ```bash
-python tasks/verify-native.py --env-file /path/to/private-native.env --binary-dir /path/to/reviewed-opencode-binary --question "Which vector database does this project use?"
+python tasks/verify-native.py \
+  --env-file /path/to/private-native.env \
+  --binary-dir /path/to/reviewed-opencode-binary \
+  --mcp-url http://127.0.0.1:48761/mcp \
+  --expected-backend-id YOUR_DEPLOYMENT_BACKEND_ID \
+  --question "Which embedded vector database does CiteRAG use?" \
+  --require-term LanceDB \
+  --certify-current
 ```
 
-The runner checks host resource admission before executing Docker, uses only the configured project-scoped MCP search tool and a fixed free model, and saves a sanitized JSONL trace and verification report in a per-run directory. Verification requires a real native tool event, approved source path and chunk ID, and a supported verbatim claim. An exit code, a historical trace, or a successful model-only response is not production certification.
+These paths and backend identifier are placeholders to replace with verified operator configuration. The example endpoint is the isolated native test endpoint; inspect the actual deployment before use.
 
-A missing scoped credential or reviewed binary, unsafe permissions, timeout, denied MCP access, unsupported claims, or other unexpected tool use must fail closed. Backend identity attestation, GitHub Actions worker acceptance evidence, and the production web-adapter integration remain independent gates.
+Certification requires a real permitted tool event, matching standalone backend identity, valid source/chunk pairs, supported answer text and the expected known-fact term. The runner refuses `--certify-current` without acceptance terms. Sanitized traces/reports stay outside Git. An exit code, an older project's trace, a model-only response or irrelevant quoted text cannot pass as a certified answer.
+
+## Current evidence
+
+One live probe executed a real tool call and passed backend/citation plumbing checks but echoed irrelevant dashboard/UI text. It is not accepted native answer certification. Retrieval relevance and a new known-fact run must pass before advertising native generation as verified.
+
+Missing credentials/binary, unsafe permissions, resource failure, denied MCP access, unexpected tools, timeout, unsupported claims or relevance failure must fail closed. A passing native probe is one release gate; exact-source CI/image checks and production deployment/rollback acceptance remain separate.

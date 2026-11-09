@@ -1,0 +1,156 @@
+"""Native adapter contract tests use fake subprocesses, never inference."""
+import importlib.util
+import json
+import os
+from pathlib import Path
+import subprocess
+import tempfile
+import unittest
+from unittest.mock import patch
+from citerag import native
+from citerag.native_result import ABSTENTION
+
+ROOT = Path(__file__).resolve().parents[1]
+spec = importlib.util.spec_from_file_location("contract_runner", ROOT/"tasks/verify-native.py")
+runner = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(runner)
+
+
+class NativeAdapterContractTests(unittest.TestCase):
+    def test_missing_configuration_fails_without_subprocess(self):
+        with patch.dict(os.environ, {}, clear=True), patch.object(native.subprocess, "run") as run:
+            self.assertEqual(native.answer("question")["error"], "NativeAdapterUnavailable")
+            run.assert_not_called()
+
+    def test_adapter_supplies_private_config_and_consumes_runner_result(self):
+        report = {"status":"PASS", "backend_identity_attested":True,
+                  "final_answer":ABSTENTION, "retrieved_sources":[],
+                  "native_tool_calls":1, "citations_verified":False,
+                  "claims_supported":False, "grounding_contract":"verbatim-extractive",
+                  "abstained":True}
+        with patch.object(native, "prepare_context", return_value={"status":"completed"}), patch.object(native, "configuration_status", return_value="ready"), patch.dict(
+            os.environ, {"CITERAG_NATIVE_ENV_FILE":"/private/native.env",
+                         "CITERAG_NATIVE_BINARY_DIR":"/reviewed/binary",
+                         "CITERAG_BACKEND_ID":"backend-fixture"}), patch.object(
+            native.subprocess,"run",return_value=subprocess.CompletedProcess([],0,json.dumps(report),"")) as run:
+            result = native.answer("question")
+            self.assertEqual(result["status"], "insufficient_evidence")
+            args = run.call_args.args[0]
+            self.assertIn("--env-file", args)
+            self.assertIn("--binary-dir", args)
+            self.assertIn("--expected-backend-id", args)
+            self.assertNotIn("--report-dir", args)
+
+    def test_unattested_result_is_rejected(self):
+        with patch.object(native,"prepare_context",return_value={"status":"completed"}), patch.object(native,"configuration_status",return_value="ready"), patch.dict(
+            os.environ,{"CITERAG_NATIVE_ENV_FILE":"/private/native.env",
+                        "CITERAG_NATIVE_BINARY_DIR":"/reviewed/binary",
+                        "CITERAG_BACKEND_ID":"backend-fixture"}), patch.object(
+            native.subprocess,"run",return_value=subprocess.CompletedProcess([],0,'{"status":"PASS"}',"")):
+            self.assertEqual(native.answer("q")["error"], "NativeVerificationFailed")
+
+    def test_failed_refresh_never_starts_inference(self):
+        with patch.object(native,"configuration_status",return_value="ready"), patch.object(
+            native,"prepare_context",return_value={"status":"failed"}), patch.object(
+            native.subprocess,"run") as run:
+            self.assertEqual(native.answer("q")["error"],"ContextNotFresh")
+            run.assert_not_called()
+
+    def test_deployment_fingerprint_changes_for_binary_credentials_and_endpoint(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)
+            (path/"opencode").write_text("reviewed-binary-fixture")
+            env=path/"native.env";env.write_text("dedicated-fixture-one")
+            args={"env_path":env,"binary_dir":path,"mcp_url":"http://127.0.0.1:50001/mcp","backend_id":"fixture","image_id":"sha256:"+"a"*64}
+            baseline=native.deployment_fingerprint(**args)
+            self.assertNotEqual(baseline,native.deployment_fingerprint(**{**args,"mcp_url":"http://127.0.0.1:50002/mcp"}))
+            env.write_text("dedicated-fixture-two")
+            self.assertNotEqual(baseline,native.deployment_fingerprint(**args))
+            env.write_text("dedicated-fixture-one")
+            (path/"opencode").write_text("changed-binary-fixture")
+            self.assertNotEqual(baseline,native.deployment_fingerprint(**args))
+
+    def test_runner_rejects_non_loopback_mcp(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            (path/"opencode").touch()
+            for url in ("http://example.com/mcp","http://user@localhost/mcp",
+                        "https://localhost/mcp","http://localhost/mcp?x=y"):
+                with self.assertRaises(runner.AdmissionError):
+                    runner.container_command(path/"e",path,"test","q",url)
+
+    def test_success_requires_real_backend_identity(self):
+        events = [
+            {"type":"tool_use","part":{"tool":"citerag_rag_search","state":{
+                "status":"completed","output":json.dumps({"results":[],"backend_id":"fixture-backend"})}}},
+            {"type":"text","part":{"text":ABSTENTION}},
+            {"type":"step_finish","part":{"reason":"stop"}}]
+        trace = "\n".join(json.dumps(e) for e in events)
+        process = subprocess.CompletedProcess([],0,trace,"✓ citerag connected")
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)
+            (path/"opencode").touch()
+            (path/"env").write_text("dedicated-test-fixture")
+            with patch.object(runner,"env_file",return_value=path/"env"), patch.object(
+                runner,"preflight",return_value={}), patch.object(runner,"native_image_id",return_value="sha256:"+"a"*64), patch.object(runner.subprocess,"run",return_value=process):
+                result=runner.run("q",path/"env",path,expected_backend_id="fixture-backend",report_dir=path/"report")
+            self.assertEqual(result["status"],"PASS")
+            self.assertTrue(result["backend_identity_attested"])
+            self.assertEqual(result["final_answer"],ABSTENTION)
+            with patch.object(runner,"env_file",return_value=path/"env"), patch.object(
+                runner,"preflight",return_value={}), patch.object(runner,"native_image_id",return_value="sha256:"+"a"*64), patch.object(runner.subprocess,"run",return_value=process):
+                result=runner.run("q",path/"env",path,expected_backend_id="other-backend",report_dir=path/"report2")
+            self.assertEqual(result["status"],"FAIL")
+            with patch.object(runner,"env_file",return_value=path/"env"), patch.object(
+                runner,"preflight",return_value={}), patch.object(runner,"native_image_id",return_value="sha256:"+"a"*64), patch.object(runner.subprocess,"run",return_value=process):
+                result=runner.run("q",path/"env",path,expected_backend_id="fixture-backend",report_dir=path/"report3",required_terms=["LanceDB"])
+            self.assertEqual(result["status"],"FAIL")
+            self.assertEqual(result["reason"],"AcceptanceFactsMissing")
+
+
+class NativeImageIdentityTests(unittest.TestCase):
+    def test_resolver_reads_local_immutable_identity_without_run_or_pull(self):
+        image = "sha256:" + "a" * 64
+        with patch.object(native.subprocess, "run", return_value=subprocess.CompletedProcess([],0,image+"\n","")) as call:
+            self.assertEqual(native.native_image_id(), image)
+        self.assertEqual(call.call_args.args[0][:3], ["docker","image","inspect"])
+        self.assertEqual(call.call_args.kwargs["timeout"],5)
+    def test_resolver_rejects_missing_or_malformed_identity(self):
+        for result in (subprocess.CompletedProcess([],1,"","failure"), subprocess.CompletedProcess([],0,"local/opencode-agent:2.0.0","")):
+            with patch.object(native.subprocess,"run",return_value=result):
+                with self.assertRaises(ValueError): native.native_image_id()
+    def test_command_uses_immutable_image_and_rejects_tags(self):
+        image = "sha256:" + "a" * 64
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory);(path/"opencode").touch()
+            command=runner.container_command(path/"env",path,"fixture","question",image_id=image)
+            self.assertIn(image,command)
+            self.assertNotIn(runner.IMAGE,command)
+            for candidate in (None, runner.IMAGE, "sha256:bad"):
+                with self.assertRaises(runner.AdmissionError):
+                    runner.container_command(path/"env",path,"fixture","question",image_id=candidate)
+    def test_retagged_image_invalidates_deployment_proof(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory);(path/"opencode").write_text("fixture")
+            env=path/"env";env.write_text("private-fixture")
+            arguments={"env_path":env,"binary_dir":path,"mcp_url":"http://127.0.0.1:58761/mcp","backend_id":"fixture"}
+            with patch.object(native,"native_image_id",return_value="sha256:"+"a"*64):first=native.deployment_fingerprint(**arguments)
+            with patch.object(native,"native_image_id",return_value="sha256:"+"b"*64):second=native.deployment_fingerprint(**arguments)
+            self.assertNotEqual(first,second)
+
+
+class NativeReadinessGuardTests(unittest.TestCase):
+    def test_initial_connection_refusal_is_bounded_before_any_model_call(self):
+        import shlex
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory);fake=path/"opencode";catalog=path/"catalog";counter=path/"counter";profile=path/"profile.json"
+            profile.write_text("{}")
+            fake.write_text("#!/bin/sh\nif [ \"$1\" = service ]; then exit 0; fi\nn=0; if [ -f "+shlex.quote(str(counter))+" ]; then n=$(cat "+shlex.quote(str(counter))+"); fi\nn=$((n+1)); echo $n > "+shlex.quote(str(counter))+"\nif [ $n -lt 3 ]; then echo 'citerag failed ECONNREFUSED'; exit 1; fi\necho '✓ citerag connected'\n")
+            fake.chmod(0o700)
+            command=runner.container_command(path/"env",path,"fixture","question",image_id="sha256:"+"a"*64)
+            script=command[command.index("-c")+1].split("timeout -s TERM -k 5 150",1)[0]
+            script=script.replace("/opt/opencode/opencode",shlex.quote(str(fake))).replace("/opt/native-profile.json",shlex.quote(str(profile))).replace("/tmp/oc-home",str(path/"home")).replace("/tmp/catalog",shlex.quote(str(catalog)))
+            result=subprocess.run(["/bin/sh","-c",script],capture_output=True,text=True,timeout=15)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertEqual(counter.read_text().strip(),"3")
+            self.assertIn("✓ citerag connected",result.stderr)

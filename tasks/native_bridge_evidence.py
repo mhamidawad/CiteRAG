@@ -8,7 +8,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from citerag.native_result import evaluate
+from citerag.native_result import evaluate, canonical_source
 
 MAX_TRACE_BYTES = 5 * 1024 * 1024
 TOOL_PATTERN = re.compile(r"[a-z][a-z0-9_-]{0,63}_rag_search")
@@ -23,9 +23,7 @@ def verify(trace, *, exit_code, tool, expected_source=None):
         raise EvidenceError("UNAPPROVED_TOOL_NAME")
     if not isinstance(exit_code, int) or isinstance(exit_code, bool):
         raise EvidenceError("INVALID_EXIT_CODE")
-    if expected_source and (not isinstance(expected_source, str) or
-                            not re.fullmatch(r"docs/[A-Za-z0-9_./-]+\.(md|txt)", expected_source) or
-                            ".." in Path(expected_source).parts):
+    if expected_source and not canonical_source(expected_source):
         raise EvidenceError("INVALID_SOURCE_CONSTRAINT")
     if not isinstance(trace, str) or len(trace.encode("utf-8")) > MAX_TRACE_BYTES:
         raise EvidenceError("TRACE_SIZE_INVALID")

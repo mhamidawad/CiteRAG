@@ -1,15 +1,29 @@
 # CiteRAG architecture
 
-## Boundaries
+CiteRAG uses LanceDB as its embedded vector database.
 
-CiteRAG has three conceptual layers. The document layer reads allowlisted Markdown/text under `docs/`, enforces limits, splits into overlapping token windows, and stores local vectors in LanceDB plus keyword candidates in SQLite FTS5. A lexical/semantic retrieval layer combines candidates with reciprocal-rank fusion and applies scope/evidence checks. The answer layer returns source-cited excerpts or an abstention. The optional generation layer can call an explicitly configured OmniRoute endpoint without using a Docker inspection lookup.
+## Retrieval and ingestion
 
-The REST/dashboard and MCP endpoints are interfaces to this core. The source of truth is local approved documentation; data files and model cache are gitignored. The standalone mode refreshes `docs/` before retrieval. An optional exporter configuration is distinct from standalone mode and must never ingest private directories by default.
+Local `sentence-transformers/all-MiniLM-L6-v2` embeddings run on CPU. LanceDB supplies dense vector candidates; SQLite FTS5 supplies keyword candidates. Reciprocal-rank fusion combines them before source scope, relevance and citation checks. Retrieval-only responses contain conservative cited excerpts or an explicit insufficient-evidence abstention.
+
+The document layer reads approved Markdown/text under `docs/`, splits overlapping token windows and reuses unchanged embeddings. It also supports operator-configured Git repositories through `CITERAG_REPOSITORY_SOURCES`, a JSON mapping from safe source names to explicit absolute repository roots. Only tracked allowlisted UTF-8 source/document files are eligible; hidden, dependency, generated, sensitive-name, binary and symlink paths are excluded. Redaction precedes embedding. File count, individual size and combined corpus limits bound ingestion. Citation identifiers are `docs/...` or `repositories/<name>/<relative-path>`; host root paths are not source identifiers.
+
+Standalone retrieval refreshes approved sources before search. Index updates share a writer lock. Optional history export is a separate operator configuration; it must not import private directories by default. Model cache, indexes, operational credentials and raw traces stay outside Git.
+
+## Interfaces and generation
+
+REST/dashboard and streamable-HTTP MCP expose the core. MCP `rag_search` returns source/chunk evidence and a deployment backend identifier. REST exposes adapter capabilities, context/source status, operator-approved reindexing and asynchronous answer jobs. Browsers cannot choose arbitrary server paths or submit provider secrets.
+
+The optional native adapter invokes a bounded disposable nonroot, read-only OpenCode worker. Model inference goes through the configured OmniRoute route. Real tool execution, backend identity, citation grounding and answer relevance are separate acceptance requirements. A successful tool call or a quoted but irrelevant passage does not certify a useful answer.
 
 ## Security boundaries
 
-Default listeners are loopback. There is no authenticated remote MCP transport or reliable per-workspace authorization yet. Do not publish ports, use in multitenant environments, or interpret this architecture note as a security certification. The base repository and production containers are excluded from the new project's mutation scope.
+Listeners default to loopback. Authenticated REST/MCP operation uses a server-side bearer token and private HTTPS; non-loopback startup requires authentication. Production mode also requires an explicit workspace identifier and persistent admission budgets. A deployment owns one workspace/index/token boundary; separate tenants require separate deployments and data volumes. Alternate requested workspace identifiers are rejected before application work.
 
-## Verified and outstanding
+Rate and generation admission counters are persistent SQLite transactions. They count admitted operations rather than measuring token billing. Fixed free/local native routing and hard worker timeouts provide additional inference limits. See [authenticated access](authenticated-access.md).
 
-Local tests and isolated indexing, deletion, reused embeddings, cited retrieval, abstention, REST calls and a separate MCP client have executed. Authenticated MCP, integrated OpenCode answer generation, OmniRoute generation, independent fresh installs, CI/OCI images, deployment and real-browser QA are unverified or blocked. See GitHub milestone Issues #1–#7 for evidence and blockers.
+## Acceptance status
+
+Sample and real approved repository ingestion, reuse/deletion, source-cited retrieval, abstention and authenticated staging have live evidence. The local completion suite recorded 159 passing tests on an existing runtime. Candidate authorization returned anonymous 401, wrong-workspace 403 and authorized 200.
+
+A native live probe executed one actual tool call with backend/citation checks but returned irrelevant UI wording; it is plumbing evidence, not native answer certification. Remote clean installation against the patched hash lock, final relevance acceptance and production cutover remain independent gates. See [release certification](release-certification.md).

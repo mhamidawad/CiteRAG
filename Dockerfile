@@ -1,11 +1,11 @@
 # syntax=docker/dockerfile:1.7
-# UNTESTED: build only in authorized GitHub Actions, never on the Oracle VM.
-ARG PYTHON_BASE=python:3.12-slim-bookworm
+# Build and scan only in authorized GitHub Actions; never on the deployment host.
+ARG PYTHON_BASE=python:3.12-slim-bookworm@sha256:0f086103b026048cc50cb5da25ec435c023c5241a83fc44daea593377abc61c4
 FROM ${PYTHON_BASE} AS wheels
 WORKDIR /build
 COPY requirements.lock.txt /build/requirements.lock.txt
-# Dependency versions are pinned in requirements.lock.txt. Hash locking and image
-# digest pinning remain open release-security tasks.
+# CPU wheel versions and hashes are locked for Python 3.12 Linux amd64.
+# The base image is digest pinned; no source distributions are built.
 RUN python -m pip wheel --no-cache-dir --wheel-dir /wheels \
     --extra-index-url https://download.pytorch.org/whl/cpu \
     -r /build/requirements.lock.txt
@@ -24,6 +24,7 @@ RUN python -m pip install --no-index --no-cache-dir --find-links=/wheels \
 COPY --chown=65532:65532 citerag /app/citerag
 COPY --chown=65532:65532 docs /app/docs
 COPY --chown=65532:65532 tasks /app/tasks
+COPY --chown=65532:65532 configs /app/configs
 USER 65532:65532
 EXPOSE 18761 18762
 CMD ["python","-m","citerag.web"]

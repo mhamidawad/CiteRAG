@@ -4,17 +4,21 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs"
 MODEL = os.getenv("CITERAG_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+REVISION = os.getenv("CITERAG_EMBEDDING_REVISION", "1110a243fdf4706b3f48f1d95db1a4f5529b4d41")
 KEYWORDS = ROOT / "data/keyword.sqlite3"
 _model = None
 def model():
     global _model
     if _model is None:
+        if not re.fullmatch(r"[a-f0-9]{40}",REVISION):
+            raise ValueError("Embedding revision must be an immutable 40-hex commit")
         import torch
         from sentence_transformers import SentenceTransformer
         torch.set_num_threads(2)
-        _model = SentenceTransformer(MODEL, device="cpu", cache_folder=os.getenv("CITERAG_MODEL_CACHE_DIR", str(ROOT / "data/models")), local_files_only=os.environ.get("CITERAG_OFFLINE","1") == "1", trust_remote_code=False)
+        _model = SentenceTransformer(MODEL, revision=REVISION, device="cpu", cache_folder=os.getenv("CITERAG_MODEL_CACHE_DIR", str(ROOT / "data/models")), local_files_only=os.environ.get("CITERAG_OFFLINE","1") == "1", trust_remote_code=False)
     return _model
 def documents():
+    from citerag.repository_sources import repository_documents
     total = 0
     for path in sorted(DOCS.rglob("*")):
         if path.is_symlink() or not path.is_file() or path.suffix not in {".md",".txt"}:
@@ -24,16 +28,23 @@ def documents():
         if any(part.startswith(".") for part in path.relative_to(DOCS).parts):
             continue
         text = path.read_text(encoding="utf-8")
-        total += len(text)
+        total += len(text.encode("utf-8"))
         if total > 2000000:
             raise ValueError("Corpus exceeds 2 MB limit")
         yield path.relative_to(ROOT).as_posix(), text
+    for source,text in repository_documents():
+        total += len(text.encode("utf-8"))
+        if total > 2000000:
+            raise ValueError("Corpus exceeds 2 MB limit")
+        yield source,text
 def chunks():
     tokenizer = model().tokenizer
     provenance_path = DOCS / "context/manifest.json"
     provenance = json.loads(provenance_path.read_text()) if provenance_path.exists() else {}
     for source, text in documents():
         metadata = provenance.get(source.removeprefix("docs/context/"), {})
+        if source.startswith("repositories/"):
+            metadata = {"kind":"source_code", "project":source.split("/",2)[1]}
         tokens = tokenizer.encode(text, add_special_tokens=False, truncation=False, verbose=False)
         for start in range(0,len(tokens),160):
             body = tokenizer.decode(tokens[start:start+200], skip_special_tokens=True)
@@ -51,7 +62,7 @@ def ingest():
     if "documents" in db.table_names():
         old_rows = db.open_table("documents").to_arrow().to_pylist()
     dimension = model().get_sentence_embedding_dimension()
-    reusable = {row["id"]:row["vector"] for row in old_rows if row.get("embedding_model")==MODEL and len(row.get("vector",[]))==dimension}
+    reusable = {row["id"]:row["vector"] for row in old_rows if row.get("embedding_model")==MODEL and row.get("embedding_revision")==REVISION and len(row.get("vector",[]))==dimension}
     fresh = [row for row in rows if row["id"] not in reusable]
     if fresh:
         vectors = model().encode([row["text"] for row in fresh],batch_size=16,normalize_embeddings=True,show_progress_bar=False)
@@ -61,12 +72,13 @@ def ingest():
         if row["id"] in reusable:
             row["vector"] = reusable[row["id"]]
         row["embedding_model"] = MODEL
-    fingerprint = hashlib.sha256("".join(sorted(r["id"] for r in rows)).encode()).hexdigest()
+        row["embedding_revision"] = REVISION
+    fingerprint = hashlib.sha256((MODEL+"@"+REVISION+"\n"+"".join(sorted(r["id"] for r in rows))).encode()).hexdigest()
     for row in rows:
         row["corpus_version"] = fingerprint
     db.create_table("documents",rows,mode="overwrite")
     build_keywords(rows, fingerprint)
-    return {"chunks":len(rows),"model":MODEL,"corpus_version":fingerprint,"keyword_index":True,"new_embeddings":len(fresh),"reused_embeddings":len(rows)-len(fresh),"removed_chunks":len({r["id"] for r in old_rows}-{r["id"] for r in rows})}
+    return {"chunks":len(rows),"model":MODEL,"embedding_revision":REVISION,"corpus_version":fingerprint,"keyword_index":True,"new_embeddings":len(fresh),"reused_embeddings":len(rows)-len(fresh),"removed_chunks":len({r["id"] for r in old_rows}-{r["id"] for r in rows})}
 def build_keywords(rows, fingerprint, path=None):
     path = Path(path or KEYWORDS)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -119,10 +131,44 @@ def support_terms(text):
     return result
 
 
+def code_evidence_query(query):
+    """Explicit implementation/source questions may legitimately match example code."""
+    return bool(re.search(r"(?i)\b(code|source|function|class|method|variable|symbol|handler|implementation|implement|placeholder|fixture|test|html|css|javascript|typescript|python)\b|`[^`]+`|\b[\w/-]+\.(?:py|tsx?|jsx?|html|css|go|rs|java)\b",query))
+
+
+def evidence_sentences(text, include_questions=False):
+    """Keep source spans, excluding question/example echoes from factual evidence.
+
+    A query appearing in a placeholder, acceptance prompt or FAQ question is not
+    support for its answer. Conservative exclusion can abstain rather than cite it.
+    """
+    spans=[span.strip() for span in re.split(r'(?<=[.!?])\s+',text) if span.strip()]
+    if include_questions:return spans
+    return [span for span in spans if '?' not in span and '؟' not in span]
+
+
+def factual_evidence_text(query,text):
+    return ' '.join(evidence_sentences(text,include_questions=code_evidence_query(query)))
+
+
+def source_relevance_weight(query,row):
+    """Prefer explanatory docs over fixtures/code for factual architecture questions."""
+    if code_evidence_query(query):return 1.0
+    parts=Path(row.get('source','')).parts
+    if any(part in {'tests','test','fixtures','examples','tasks'} for part in parts):return 0.35
+    if row.get('kind')=='source_code' and Path(row.get('source','')).suffix.lower() not in {'.md','.txt'}:return 0.65
+    return 1.0
+
+
 def evidence_coverage(query,row):
     wanted=support_terms(query)
     if not wanted:return 0.0
-    available=support_terms(' '.join(str(row.get(k,'')) for k in ('text','source','project','session_id','id')))
+    # Source paths/IDs locate evidence; they do not substantiate factual claims.
+    # Explicit source/history lookups retain metadata matching for navigation.
+    historical=bool(re.search(r"(?i)\b(history|historical|previous|earlier|session|conversation|archived)\b|سابق|جلسة|محادثة",query))
+    available=support_terms(factual_evidence_text(query,str(row.get('text',''))))
+    if code_evidence_query(query) or historical:
+        available.update(support_terms(' '.join(str(row.get(k,'')) for k in ('source','project','session_id','id'))))
     if row.get('kind') in {'opencode_session','native_answer'}:
         available.update({'history','session','conversation','directory'})
     return len(wanted & available)/len(wanted)
@@ -146,7 +192,8 @@ def search(query, limit=5, max_distance=0.9):
     import lancedb
     table = lancedb.connect(str(ROOT/"data/lancedb")).open_table("documents")
     # Project scopes come only from explicitly approved source directories.
-    aliases={}
+    from citerag.repository_sources import configured_sources
+    aliases={name:{name} for name in configured_sources()}
     config_path=ROOT/"context-sources.json"
     if config_path.exists():
         for location in json.loads(config_path.read_text()).get("session_directories",[]):
@@ -207,7 +254,7 @@ def search(query, limit=5, max_distance=0.9):
         if coverage<minimum:
             del scores[key]
             continue
-        scores[key] *= coverage*coverage
+        scores[key] *= coverage*coverage*source_relevance_weight(query,rows[key])
         if not historical and not other_project:
             scores[key] *= float(weights.get(rows[key].get('source'),1.0))
         rows[key]['evidence_coverage']=coverage

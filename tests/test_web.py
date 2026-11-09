@@ -6,6 +6,7 @@ from citerag import web
 class WebTests(unittest.TestCase):
     def setUp(self):
         fresh=patch.object(web,'prepare_context',return_value={'status':'completed'});fresh.start();self.addCleanup(fresh.stop)
+        ready=patch.object(web,"adapter_capabilities",return_value=[{**data,"available":True,"status":"verified"} for data in web.ADAPTERS.values()]);ready.start();self.addCleanup(ready.stop)
         self.client = TestClient(web.app)
     def test_page_and_health(self):
         self.assertEqual(self.client.get('/').status_code, 200)
