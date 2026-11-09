@@ -1,0 +1,59 @@
+---
+title: "CiteRAG isolated preview acceptance — 2026-11-08 (UTC+03:00)"
+---
+
+**Status: PREVIEW VERIFIED, PRODUCTION RELEASE BLOCKED.** This is a measured
+acceptance record for a private loopback-only Python preview, not Docker/GHCR
+production certification. The repository remains PRIVATE.
+
+## Isolated acceptance evidence
+
+| Gate | Observed result |
+| --- | --- |
+| Python regression suite | 80 tests passed on the isolated workspace |
+| Offline MiniLM and LanceDB | Real indexing, warm reuse, source search, deletion and restoration passed |
+| Citation contract | Supported query produced a source-cited, claim-checked extractive answer |
+| Unsupported answer | Exact abstention; no unsupported cited answer |
+| MCP client | Connected, listed and called `rag_search` with 64-character chunk provenance |
+| REST live API | Retrieval-only completed; unknown adapter 400 |
+| Explicit unverified generation | OpenCode and OmniRoute adapters rejected with HTTP 503 |
+| Dashboard | Invalid checkbox reference removed; JavaScript syntax check passed |
+| Tracked source scan | Passed |
+| Reachable Git-history pattern scan | 27 commits, 83 file versions, passed with two exact-line audited fixture exceptions |
+| Python compile and Compose static config | Passed; **does not test a container build** |
+| Network binding | `127.0.0.1:28762` only |
+| Original services | Remained running; no source-repo edits |
+| Git working tree | Clean after changes were committed and pushed |
+
+The preview runs as a bounded transient `citerag-private-preview.service`
+user unit, using an *existing* Python environment. It has no external network
+listener and no automatic reboot enablement. The browser/API remains
+unauthenticated beyond loopback isolation. See [private-preview.md](/private-preview)
+for read-only checks and safe shutdown.
+
+## HARD BLOCKERS TO PRODUCTION
+
+1. GitHub Actions jobs cannot start: GitHub run 42413855935 reports an account
+   billing/spending-limit issue **before any test step executes**.
+2. CI workflow PR #19 was merged into private `main` (commit `ef40e0e7`). Jobs still cannot start because of the account billing restriction, and no green GitHub CI run exists.
+3. No verified private GHCR image digest or remotely built image has been
+   tested on the VM. **Do not build Docker images on this production host.**
+4. Independent fresh-install validation and Docker isolated runtime, health,
+   security, rollback and persistence tests remain unverified.
+5. Native OpenCode runner is absent from the standalone distribution; actual
+   OpenCode tool-calling acceptance is unverified.
+6. OmniRoute generation has no verified CiteRAG credentials/model configuration.
+   No paid or unverified model inference was made.
+7. Authenticated remote MCP, HTTP user authentication, workspace authorization,
+   comprehensive code-source ingestion, and independent security review remain
+   outstanding.
+8. Previously exposed external credentials require owner-coordinated rotation
+   and revocation verification.
+9. PR #20 remains draft; do not claim its fixes are on `main` before review
+   and merging.
+
+### Go/no-go
+
+**NO-GO for production deployment.** A private loopback preview is operating,
+but the remote-build/CI and security gates above have not passed. Do not
+publish, expose ports, auto-merge drafts or silently reuse production secrets.

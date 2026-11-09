@@ -1,0 +1,61 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "CiteRAG",
+  "colors": {
+    "primary": "#0E7C66",
+    "light": "#0E7C66",
+    "dark": "#34D399"
+  },
+  "navigation": {
+    "groups": [
+      {
+        "group": "Get started",
+        "pages": [
+          "index",
+          "architecture",
+          "adapters",
+          "example-agent-mcp"
+        ]
+      },
+      {
+        "group": "Deployment",
+        "pages": [
+          "docker",
+          "container-production",
+          "host-production",
+          "private-preview",
+          "authenticated-access"
+        ]
+      },
+      {
+        "group": "Acceptance and release",
+        "pages": [
+          "private-preview-acceptance",
+          "native-standalone-acceptance",
+          "github-worker-preflight",
+          "release-certification",
+          "go-public-checklist"
+        ]
+      },
+      {
+        "group": "Operations",
+        "pages": [
+          "rollback",
+          "sample"
+        ]
+      }
+    ]
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/mhamidawad/citerag"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/mhamidawad/citerag"
+    }
+  }
+}
