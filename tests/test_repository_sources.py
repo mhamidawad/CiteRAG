@@ -32,6 +32,20 @@ class RepositorySourcesTests(unittest.TestCase):
         path.parent.mkdir(parents=True,exist_ok=True)
         path.write_bytes(body if isinstance(body,bytes) else body.encode())
         self.git("add","--",name)
+    def test_index_version_four_and_head_revision_are_supported(self):
+        self.track("src/foo.py", "first")
+        self.track("src/far.py", "second")
+        self.git("update-index", "--index-version=4")
+        indexed, revision = sources._git_inventory(self.root)
+        expected = self.git("rev-parse", "HEAD").stdout.decode().strip()
+        self.assertIn(b"src/foo.py", indexed)
+        self.assertIn(b"src/far.py", indexed)
+        self.assertEqual(revision, expected)
+        self.assertEqual(set(dict(sources.repository_documents())),
+                         {"repositories/sample/hello.py",
+                          "repositories/sample/src/far.py",
+                          "repositories/sample/src/foo.py"})
+
     def test_only_tracked_source_and_safe_stable_citation(self):
         (self.root/"untracked.py").write_text("unapproved")
         self.track("main.ts","export const ready = true;")
