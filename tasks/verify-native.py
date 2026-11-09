@@ -21,10 +21,10 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 from citerag.native_result import sanitize_trace, evaluate, runtime_fingerprint, result_envelopes
 from citerag.context import redact
-from citerag.native import deployment_fingerprint
+from citerag.native import deployment_fingerprint, native_image_id, NATIVE_IMAGE
 from tasks.native_bridge_evidence import verify as verify_trace
 
-IMAGE="local/opencode-agent:2.0.0"
+IMAGE=NATIVE_IMAGE
 MODEL="ollama-local/qwen3.5:4b-opencode"
 REQUIRED={"CITERAG_API_TOKEN","CITERAG_OMNIROUTE_API_KEY"}
 
@@ -53,7 +53,7 @@ def preflight():
         raise AdmissionError("RESOURCE_PREFLIGHT_BLOCKED")
     return report.get("snapshot",{})
 
-def container_command(env,binary_dir,container,question,mcp_url="http://127.0.0.1:48761/mcp"):
+def container_command(env,binary_dir,container,question,mcp_url="http://127.0.0.1:48761/mcp",image_id=None):
     parsed=urlparse(mcp_url)
     if parsed.scheme!="http" or parsed.hostname not in {"127.0.0.1","localhost","::1"} or parsed.path!="/mcp" or parsed.username or parsed.password or parsed.query or parsed.fragment:
         raise AdmissionError("MCP_URL_NOT_LOOPBACK")
@@ -61,6 +61,8 @@ def container_command(env,binary_dir,container,question,mcp_url="http://127.0.0.
     if not profile.is_file() or profile.is_symlink():raise AdmissionError("PROFILE_MISSING")
     if not binary_dir.is_absolute() or not (binary_dir/"opencode").is_file():
         raise AdmissionError("PINNED_BINARY_MISSING")
+    if not isinstance(image_id,str) or not re.fullmatch(r"sha256:[a-f0-9]{64}",image_id):
+        raise AdmissionError("IMMUTABLE_NATIVE_IMAGE_REQUIRED")
     port=None
     for _ in range(20):
         candidate=49152+secrets.randbelow(14000)
@@ -95,7 +97,7 @@ def container_command(env,binary_dir,container,question,mcp_url="http://127.0.0.
        "-e","OPENCODE_DISABLE_AUTOUPDATE=true",
        "--mount",f"type=bind,src={profile},dst=/opt/native-profile.json,readonly",
        "--mount",f"type=bind,src={binary_dir},dst=/opt/opencode,readonly",
-       "--entrypoint","/bin/sh",IMAGE,"-c",script,"_",question]
+       "--entrypoint","/bin/sh",image_id,"-c",script,"_",question]
 
 def run(question,env_path,binary_path,mcp_url="http://127.0.0.1:48761/mcp",expected_backend_id=None,report_dir=None,required_terms=()):
     started_at=datetime.now(timezone.utc).isoformat()
@@ -107,7 +109,8 @@ def run(question,env_path,binary_path,mcp_url="http://127.0.0.1:48761/mcp",expec
     snapshot=preflight()
     container="citerag-native-"+uuid.uuid4().hex[:12]
     binary_dir=binary_path.resolve()
-    command=container_command(env,binary_dir,container,question.strip(),mcp_url)
+    image_id=native_image_id()
+    command=container_command(env,binary_dir,container,question.strip(),mcp_url,image_id=image_id)
     report_dir=Path(report_dir) if report_dir else ROOT/"reports"/"native"/container
     report_dir.mkdir(parents=True,exist_ok=False)
     result=None
@@ -145,13 +148,13 @@ def run(question,env_path,binary_path,mcp_url="http://127.0.0.1:48761/mcp",expec
     ok=check["status"]=="PASS" and tool_ready and attested and (not required_terms or terms_verified)
     if required_terms and not terms_verified:failure_reason="AcceptanceFactsMissing"
     answer={"status":"PASS" if ok else "FAIL","started_at":started_at,"completed_at":datetime.now(timezone.utc).isoformat(),
-       "model":MODEL,"attempts":1,"free_local_model":True,
+       "model":MODEL,"attempts":1,"free_local_model":True,"native_image_id":image_id,
        "required_acceptance_terms":list(required_terms),"acceptance_terms_verified":terms_verified,
        "resource_gate":"READY","resource_snapshot":snapshot,
        "mcp_readiness_observed":tool_ready,"container_isolated":True,
        "backend_identity_attested":attested,"backend_id":expected_backend_id,
        "runtime_fingerprint":runtime_fingerprint(),
-       "deployment_fingerprint":deployment_fingerprint(env_path=env,binary_dir=binary_dir,mcp_url=mcp_url,backend_id=expected_backend_id,model=MODEL),
+       "deployment_fingerprint":deployment_fingerprint(env_path=env,binary_dir=binary_dir,mcp_url=mcp_url,backend_id=expected_backend_id,model=MODEL,image_id=image_id),
        "standalone_production_certified":False,
        **{key:evaluated[key] for key in ("final_answer","retrieved_sources","native_tool_calls","citations_verified","claims_supported","grounding_contract","abstained","automatic_tool_selection_verified")},
        "trace":check}

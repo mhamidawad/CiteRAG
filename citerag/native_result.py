@@ -97,10 +97,10 @@ def citation_and_claim_checks(text,evidence):
            r'[ \t]*(?:\r?\n[ \t]*|[ \t]+)chunk(?:[ \t]+id)?[ \t]*:[ \t]*'+chunk+r'[ \t]*$')
     body=re.sub(lines,consume,body,flags=re.IGNORECASE|re.MULTILINE)
     cited=bool(cited_pairs) and bool(pairs) and all(canonical_source(source) and (source,chunk) in pairs for source,chunk in cited_pairs)
-    normalize=lambda value:' '.join(re.findall(r'\w+',value.casefold()))
-    passages=[normalize(row.get('text','')) for row in evidence if row.get('text')]
+    normalize=lambda value:' '.join(re.findall(r'[-+]?\d+(?:\.\d+)*(?:%|[a-z]+)?|\w+',value.casefold()))
+    passages=[normalize(row.get('text','')) for row in evidence if row.get('text') and (row.get('source'),row.get('id')) in set(cited_pairs)]
     claims=[normalize(x) for x in re.split(r'\n+|(?<=[.!?])\s+',body) if normalize(x)]
-    supported=bool(claims) and bool(passages) and all(any(claim in passage for passage in passages) for claim in claims)
+    supported=bool(claims) and bool(passages) and all(any((' '+claim+' ') in (' '+passage+' ') for passage in passages) for claim in claims)
     return bool(cited),supported
 
 

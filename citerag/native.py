@@ -1,5 +1,6 @@
 """Bounded server-side native OpenCode adapter; credentials never enter requests."""
 import json
+import re
 import hashlib
 from functools import lru_cache
 import os
@@ -11,6 +12,20 @@ from citerag.native_result import runtime_fingerprint
 from citerag.freshness import prepare_context
 
 
+NATIVE_IMAGE = "local/opencode-agent:2.0.0"
+
+
+def native_image_id():
+    """Resolve the reviewed local tag without pulling or starting any container."""
+    result = subprocess.run(["docker", "image", "inspect", NATIVE_IMAGE,
+                             "--format", "{{.Id}}"],
+                            capture_output=True, text=True, timeout=5)
+    image_id = result.stdout.strip()
+    if result.returncode or not re.fullmatch(r"sha256:[a-f0-9]{64}", image_id):
+        raise ValueError("NATIVE_IMAGE_UNAVAILABLE")
+    return image_id
+
+
 @lru_cache(maxsize=4)
 def _binary_digest(path, dev, ino, size, mtime_ns, ctime_ns):
     digest=hashlib.sha256()
@@ -20,7 +35,7 @@ def _binary_digest(path, dev, ino, size, mtime_ns, ctime_ns):
 
 
 def deployment_fingerprint(*,env_path=None,binary_dir=None,mcp_url=None,backend_id=None,
-                           model="ollama-local/qwen3.5:4b-opencode"):
+                           model="ollama-local/qwen3.5:4b-opencode",image_id=None):
     env=Path(env_path or os.environ["CITERAG_NATIVE_ENV_FILE"])
     binary=Path(binary_dir or os.environ["CITERAG_NATIVE_BINARY_DIR"])/"opencode"
     stat=binary.stat()
@@ -28,7 +43,7 @@ def deployment_fingerprint(*,env_path=None,binary_dir=None,mcp_url=None,backend_
             "credentials":hashlib.sha256(env.read_bytes()).hexdigest(),
             "mcp_url":mcp_url or os.environ.get("CITERAG_NATIVE_MCP_URL","http://127.0.0.1:48761/mcp"),
             "backend_id":backend_id or os.environ.get("CITERAG_BACKEND_ID"),
-            "model":model}
+            "model":model,"image_id":image_id or native_image_id()}
     return hashlib.sha256(json.dumps(fields,sort_keys=True).encode()).hexdigest()
 
 
@@ -62,7 +77,7 @@ def verification_status():
             and data.get("runtime_fingerprint") == runtime_fingerprint()
             and data.get("deployment_fingerprint") == deployment_fingerprint()
         ) else "not_verified"
-    except (ValueError, OSError, KeyError):
+    except (ValueError, OSError, KeyError, subprocess.SubprocessError):
         return "not_verified"
 
 

@@ -39,7 +39,7 @@ class IsolatedNativeRunnerTests(unittest.TestCase):
  def test_docker_has_isolation_and_no_project_mount(self):
   with tempfile.TemporaryDirectory() as directory:
    d=Path(directory);(d/"opencode").write_text("fake executable")
-   args=r.container_command(d/"test.env",d,"citerag-native-test-123","question")
+   args=r.container_command(d/"test.env",d,"citerag-native-test-123","question",image_id="sha256:"+"a"*64)
    self.assertIn("--read-only",args)
    self.assertIn("no-new-privileges",args)
    self.assertIn("65534:65534",args)

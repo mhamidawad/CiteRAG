@@ -61,7 +61,7 @@ class NativeAdapterContractTests(unittest.TestCase):
             path=Path(directory)
             (path/"opencode").write_text("reviewed-binary-fixture")
             env=path/"native.env";env.write_text("dedicated-fixture-one")
-            args={"env_path":env,"binary_dir":path,"mcp_url":"http://127.0.0.1:50001/mcp","backend_id":"fixture"}
+            args={"env_path":env,"binary_dir":path,"mcp_url":"http://127.0.0.1:50001/mcp","backend_id":"fixture","image_id":"sha256:"+"a"*64}
             baseline=native.deployment_fingerprint(**args)
             self.assertNotEqual(baseline,native.deployment_fingerprint(**{**args,"mcp_url":"http://127.0.0.1:50002/mcp"}))
             env.write_text("dedicated-fixture-two")
@@ -92,17 +92,48 @@ class NativeAdapterContractTests(unittest.TestCase):
             (path/"opencode").touch()
             (path/"env").write_text("dedicated-test-fixture")
             with patch.object(runner,"env_file",return_value=path/"env"), patch.object(
-                runner,"preflight",return_value={}), patch.object(runner.subprocess,"run",return_value=process):
+                runner,"preflight",return_value={}), patch.object(runner,"native_image_id",return_value="sha256:"+"a"*64), patch.object(runner.subprocess,"run",return_value=process):
                 result=runner.run("q",path/"env",path,expected_backend_id="fixture-backend",report_dir=path/"report")
             self.assertEqual(result["status"],"PASS")
             self.assertTrue(result["backend_identity_attested"])
             self.assertEqual(result["final_answer"],ABSTENTION)
             with patch.object(runner,"env_file",return_value=path/"env"), patch.object(
-                runner,"preflight",return_value={}), patch.object(runner.subprocess,"run",return_value=process):
+                runner,"preflight",return_value={}), patch.object(runner,"native_image_id",return_value="sha256:"+"a"*64), patch.object(runner.subprocess,"run",return_value=process):
                 result=runner.run("q",path/"env",path,expected_backend_id="other-backend",report_dir=path/"report2")
             self.assertEqual(result["status"],"FAIL")
             with patch.object(runner,"env_file",return_value=path/"env"), patch.object(
-                runner,"preflight",return_value={}), patch.object(runner.subprocess,"run",return_value=process):
+                runner,"preflight",return_value={}), patch.object(runner,"native_image_id",return_value="sha256:"+"a"*64), patch.object(runner.subprocess,"run",return_value=process):
                 result=runner.run("q",path/"env",path,expected_backend_id="fixture-backend",report_dir=path/"report3",required_terms=["LanceDB"])
             self.assertEqual(result["status"],"FAIL")
             self.assertEqual(result["reason"],"AcceptanceFactsMissing")
+
+
+class NativeImageIdentityTests(unittest.TestCase):
+    def test_resolver_reads_local_immutable_identity_without_run_or_pull(self):
+        image = "sha256:" + "a" * 64
+        with patch.object(native.subprocess, "run", return_value=subprocess.CompletedProcess([],0,image+"\n","")) as call:
+            self.assertEqual(native.native_image_id(), image)
+        self.assertEqual(call.call_args.args[0][:3], ["docker","image","inspect"])
+        self.assertEqual(call.call_args.kwargs["timeout"],5)
+    def test_resolver_rejects_missing_or_malformed_identity(self):
+        for result in (subprocess.CompletedProcess([],1,"","failure"), subprocess.CompletedProcess([],0,"local/opencode-agent:2.0.0","")):
+            with patch.object(native.subprocess,"run",return_value=result):
+                with self.assertRaises(ValueError): native.native_image_id()
+    def test_command_uses_immutable_image_and_rejects_tags(self):
+        image = "sha256:" + "a" * 64
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory);(path/"opencode").touch()
+            command=runner.container_command(path/"env",path,"fixture","question",image_id=image)
+            self.assertIn(image,command)
+            self.assertNotIn(runner.IMAGE,command)
+            for candidate in (None, runner.IMAGE, "sha256:bad"):
+                with self.assertRaises(runner.AdmissionError):
+                    runner.container_command(path/"env",path,"fixture","question",image_id=candidate)
+    def test_retagged_image_invalidates_deployment_proof(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory);(path/"opencode").write_text("fixture")
+            env=path/"env";env.write_text("private-fixture")
+            arguments={"env_path":env,"binary_dir":path,"mcp_url":"http://127.0.0.1:58761/mcp","backend_id":"fixture"}
+            with patch.object(native,"native_image_id",return_value="sha256:"+"a"*64):first=native.deployment_fingerprint(**arguments)
+            with patch.object(native,"native_image_id",return_value="sha256:"+"b"*64):second=native.deployment_fingerprint(**arguments)
+            self.assertNotEqual(first,second)

@@ -1,0 +1,52 @@
+# Private host production deployment
+
+This path supports the native OpenCode adapter without placing the host Docker socket inside the web image. It uses a scanned, digest-pinned cloud image as the source and dependency artifact. The host performs no package installation and no image build.
+
+The host must provide Linux amd64, Python 3.12, Docker access for the non-root service account, systemd, at least 6 GiB free disk, a reviewed OpenCode binary, and the pinned local MiniLM cache. Native child containers retain the runner's separate non-root/read-only configuration. The host service account necessarily has Docker access; do not treat that account as an unprivileged tenant boundary.
+
+## Prepare a reviewed release
+
+1. Require passing exact-source CI, real offline embedding acceptance, dependency audit, and image vulnerability scan. Obtain the published GHCR SHA256 digest and its exact 40-character source revision label.
+2. Choose a **new** absolute release directory. The installer rejects existing directories and symlinked paths.
+3. Provision a separate owner-only environment file for the non-root runtime account. Keep it outside Git. Use literal `KEY=value` entries without shell expansion. Do not print the file.
+
+Required configuration includes:
+
+- `CITERAG_PRODUCTION=1`, `CITERAG_REQUIRE_AUTH=1`, and a dedicated API token of at least 32 characters.
+- One explicit `CITERAG_WORKSPACE_ID`, positive `CITERAG_RATE_LIMIT_PER_MINUTE` and `CITERAG_GENERATION_LIMIT_PER_DAY`.
+- `CITERAG_POLICY_DB=<new-release>/src/data/admission.sqlite3`.
+- Both listener host variables set to `127.0.0.1`; distinct unoccupied unprivileged MCP/web ports.
+- `CITERAG_OFFLINE=1`, `HF_HUB_OFFLINE=1`, and the existing `CITERAG_MODEL_CACHE_DIR`.
+- Native adapter's dedicated environment-file path, reviewed binary directory, backend identity, and loopback MCP URL. The native environment file contains a separately issued model/connection-restricted local OmniRoute credential. Never give the native agent management credentials.
+- Optional server-approved `CITERAG_REPOSITORY_SOURCES` JSON. These source paths remain operator configured; browser reindexing cannot supply arbitrary paths.
+
+Run as the same non-root account that owns the private environment file:
+
+```bash
+python3.12 deploy/activate-host-release.py \
+  --image ghcr.io/mhamidawad/citerag@sha256:<published-digest> \
+  --source-sha <reviewed-source-sha> \
+  --release-dir /srv/citerag/releases/<reviewed-source-sha> \
+  --env-file /srv/citerag/private/production.env
+```
+
+The default is validation only. It checks filesystem boundaries, credential-file permissions, the private network configuration, persistent budgets, and port availability. It does not pull an image, extract files, install units, or stop processes.
+
+After reviewing that plan, add `--activate` to the same command. The installer pulls and verifies the image digest/source label, extracts source and Python dependencies from a stopped container, smoke-tests imports with the host interpreter, validates the unit syntax, and starts only `citerag-production-mcp` and `citerag-production-web`. Code/dependencies are read-only inside each service namespace; only the release's data and reports paths are writable. Memory is limited to 1500 MiB and CPU to one core per service.
+
+An occupied port causes a failure. The installer never kills an unknown listener. Existing unit definitions require `--replace-existing`, and the reviewed old units must already be stopped. A failed activation restores the prior unit definitions and stops only the two units in this deployment. The failed release directory remains for inspection and is never overwritten on a later attempt.
+
+## Acceptance and promotion
+
+`ACTIVE_NOT_CERTIFIED` means processes started; it is not release certification. Before changing any private frontend route, verify:
+
+- HTTP liveness, anonymous API denial, authorized retrieval and cross-workspace denial.
+- Real MCP tool execution against this backend identity.
+- Known-fact native answer acceptance using `--certify-current --require-term LanceDB`, with genuine cited evidence and the final source/configuration fingerprints.
+- Source inventory, reindexing, deletion/abstention, and authenticated dashboard behavior.
+- The native API adapter on the deployed runtime, followed by a health/readiness recheck.
+- Private HTTPS route promotion and authentication-preserving rollback through the actual serving route.
+
+Keep the previous secure image, environment, data snapshot, and unit backups. Unit definition backups are stored under the new release's `unit-backups/`; image/source identity is recorded in `release-manifest.json`. Restore only reviewed unit definitions, reload systemd, start the previous services, and repeat anonymous-denial/authorized-read checks before directing traffic back. Retain user data unless an explicit data rollback was reviewed.
+
+This installer does not alter Tailscale routes, expose public ports, rotate unrelated credentials, migrate databases, or modify existing OpenCode/OmniRoute services. Those changes need separate deployment evidence. A system Python/runtime incompatibility fails the import smoke before installing service units; use a compatible host or a reviewed isolated worker architecture instead of installing arbitrary packages on the host.

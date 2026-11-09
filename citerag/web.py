@@ -13,7 +13,7 @@ from starlette.responses import HTMLResponse, JSONResponse
 from starlette.routing import Route
 from starlette.concurrency import run_in_threadpool
 from citerag.semantic import search, model
-from citerag.answer import answer, MODEL
+from citerag.answer import answer, MODEL, verification_status as direct_status
 from citerag.native import answer as native_answer, verification_status
 from citerag.freshness import prepare_context
 from citerag.native_result import ABSTENTION,runtime_fingerprint,citation_and_claim_checks
@@ -32,9 +32,10 @@ def adapter_capabilities():
     native=native_status()
     generation_configured=bool(MODEL and os.getenv("CITERAG_OMNIROUTE_API_KEY") and os.getenv("CITERAG_OMNIROUTE_URL"))
     states={"retrieval-only":"ready", "opencode":native,
-            "omniroute":"configured_not_verified" if generation_configured else "not_configured"}
+            "omniroute":direct_status()}
     return [{**data,"available":(name=="retrieval-only" or
-                                  (name=="opencode" and native=="verified")),
+                                  (name=="opencode" and native=="verified") or
+                                  (name=="omniroute" and states[name]=="verified")),
              "status":states[name]} for name,data in ADAPTERS.items()]
 
 async def adapters(request):
@@ -92,7 +93,7 @@ async def health(request):
     generation_configured=bool(MODEL and os.getenv("CITERAG_OMNIROUTE_API_KEY") and os.getenv("CITERAG_OMNIROUTE_URL"))
     return JSONResponse({"status":"ok","status_scope":"HTTP process liveness only",
                          "retrieval_index":"present" if index_ready else "uninitialized",
-                         "generation":"configured_not_verified" if generation_configured else "not_configured",
+                         "generation":direct_status(),
                          "model":MODEL if generation_configured else None,
                          "native_opencode":native_status(),"busy":_generation.locked()})
 
