@@ -1,0 +1,30 @@
+---
+title: "Bounded standalone OpenCode acceptance"
+---
+
+The operator-only `tasks/verify-native.py` runner launches one disposable nonroot read-only OpenCode container, permits only CiteRAG MCP retrieval and routes inference through the reviewed free/local OmniRoute model. A resource gate and hard deadline bound each attempt. Offline unit tests do not start a model.
+
+Provision a separate owner-only environment file containing authorized `CITERAG_API_TOKEN` and `CITERAG_OMNIROUTE_API_KEY` entries. Never commit, print or extract production secrets. Select the reviewed OpenCode binary directory and the authenticated loopback MCP endpoint.
+
+A known-fact certification probe must include an expected answer term:
+
+```bash
+python tasks/verify-native.py \
+  --env-file /path/to/private-native.env \
+  --binary-dir /path/to/reviewed-opencode-binary \
+  --mcp-url http://127.0.0.1:48761/mcp \
+  --expected-backend-id YOUR_DEPLOYMENT_BACKEND_ID \
+  --question "Which embedded vector database does CiteRAG use?" \
+  --require-term LanceDB \
+  --certify-current
+```
+
+These paths and backend identifier are placeholders to replace with verified operator configuration. The example endpoint is the isolated native test endpoint; inspect the actual deployment before use.
+
+Certification requires a real permitted tool event, matching standalone backend identity, valid source/chunk pairs, supported answer text and the expected known-fact term. The runner refuses `--certify-current` without acceptance terms. Sanitized traces/reports stay outside Git. An exit code, an older project's trace, a model-only response or irrelevant quoted text cannot pass as a certified answer.
+
+## Current evidence
+
+One live probe executed a real tool call and passed backend/citation plumbing checks but echoed irrelevant dashboard/UI text. It is not accepted native answer certification. Retrieval relevance and a new known-fact run must pass before advertising native generation as verified.
+
+Missing credentials/binary, unsafe permissions, resource failure, denied MCP access, unexpected tools, timeout, unsupported claims or relevance failure must fail closed. A passing native probe is one release gate; exact-source CI/image checks and production deployment/rollback acceptance remain separate.
