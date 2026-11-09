@@ -127,6 +127,23 @@ def validate(args):
     return release, values, bridge, roots, account
 
 
+def runtime_environment(values, kind):
+    """Keep only the credentials/config needed by each isolated app process."""
+    if kind not in {"mcp", "web"}:
+        raise DeploymentError("Invalid runtime environment kind")
+    allowed = {"CITERAG_API_TOKEN", "CITERAG_PRODUCTION", "CITERAG_REQUIRE_AUTH",
+        "CITERAG_WORKSPACE_ID", "CITERAG_POLICY_DB", "CITERAG_RATE_LIMIT_PER_MINUTE",
+        "CITERAG_GENERATION_LIMIT_PER_DAY", "CITERAG_OFFLINE", "HF_HUB_OFFLINE",
+        "CITERAG_MODEL_CACHE_DIR", "CITERAG_EMBEDDING_MODEL", "CITERAG_EMBEDDING_REVISION",
+        "CITERAG_REPOSITORY_SOURCES", "CITERAG_MCP_HOST", "CITERAG_MCP_PORT",
+        "CITERAG_MCP_ALLOWED_HOSTS", "CITERAG_MCP_ALLOWED_ORIGINS", "CITERAG_BACKEND_ID"}
+    selected = {key: value for key, value in values.items()
+                if kind == "web" or key in allowed}
+    selected.pop("CITERAG_NATIVE_ENV_FILE", None)
+    selected.pop("CITERAG_NATIVE_BINARY_DIR", None)
+    return selected
+
+
 def container_command(kind, image, release, runtime_env, values, state, roots, account):
     if kind not in {"mcp", "web"}:
         raise DeploymentError("Invalid service kind")
@@ -234,16 +251,8 @@ def activate(args, release, values, bridge, roots, account):
     runtime = release / "environments"
     runtime.mkdir(mode=0o700)
     runtime_paths = {}
-    mcp_allowed = {"CITERAG_API_TOKEN", "CITERAG_PRODUCTION", "CITERAG_REQUIRE_AUTH",
-        "CITERAG_WORKSPACE_ID", "CITERAG_POLICY_DB", "CITERAG_RATE_LIMIT_PER_MINUTE",
-        "CITERAG_GENERATION_LIMIT_PER_DAY", "CITERAG_OFFLINE", "HF_HUB_OFFLINE",
-        "CITERAG_MODEL_CACHE_DIR", "CITERAG_EMBEDDING_MODEL", "CITERAG_EMBEDDING_REVISION",
-        "CITERAG_REPOSITORY_SOURCES", "CITERAG_MCP_HOST", "CITERAG_MCP_PORT", "CITERAG_BACKEND_ID"}
     for kind in ("mcp", "web"):
-        selected = {key: value for key, value in values.items()
-                    if kind == "web" or key in mcp_allowed}
-        for key in ("CITERAG_NATIVE_ENV_FILE", "CITERAG_NATIVE_BINARY_DIR"):
-            selected.pop(key, None)
+        selected = runtime_environment(values, kind)
         path = runtime / (kind + ".env")
         with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as handle:
             for key, value in selected.items():
