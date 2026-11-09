@@ -16,13 +16,13 @@ The source repository is already public and GitHub release `v1.0.0` exists. Earl
 
 - [ ] Green tests, compilation and source/history scans for the exact release commit.
 - [ ] Real standalone OpenCode → authenticated CiteRAG MCP tool event → bounded free/local OmniRoute answer, with source/chunk and backend identity evidence.
-- [ ] Real repository ingestion and workspace/tenant authorization acceptance.
+- [x] Live approved repository ingestion, embedding reuse/deletion and single-workspace authorization acceptance.
 - [ ] Rate limits, inference quotas/cost caps and private network boundaries.
 - [ ] Authorized credential rotation and old-key revocation evidence.
 - [ ] Browser visual/function acceptance, source management, diagnostics and settings export.
 - [ ] Fresh-host installation/model-cache bootstrap and measured resource evidence.
 - [ ] Dependency/license review, dependency/image security scan, image/source attestation.
-- [ ] GitHub secret scanning, push protection, Dependabot and branch protection verified.
+- [x] GitHub repository security controls enabled during completion work; verify final settings remain effective.
 - [ ] Final immutable release image and secure rollback target verified.
 - [ ] Production deployment, health/authorization tests and rollback acceptance.
 - [ ] Dated signed acceptance and reproducible evidence, with unresolved limits stated.

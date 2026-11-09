@@ -2,7 +2,7 @@
 
 The multi-stage Dockerfile uses a version-pinned Python dependency list and CPU PyTorch index. Runtime UID/GID is 65532, offline model loading is the default, and image import checks exercise a nonroot read-only container. Build images through GitHub Actions; do not build on the Oracle VM.
 
-GitHub Actions container and publication workflows have produced GHCR images at earlier reviewed baselines. The final release must repeat source/history scans, tests and build checks on its exact source. The Python base image is mutable and dependency hashes are not locked; these remain supply-chain review items.
+GitHub Actions container and publication workflows have produced GHCR images at earlier reviewed baselines. The final release must repeat source/history scans, tests and build checks on its exact source. The Python base is now digest-pinned and dependencies carry official wheel hashes. Hosted clean installation, dependency/image scans and model bootstrap remain exact-candidate acceptance requirements.
 
 The checked-in Compose template is a staging starting point, not evidence of a running secure deployment. Its default host mappings are loopback 28761/28762. Mounted docs/config, index and model caches must be owned and provisioned for the runtime identity. It sets read-only root filesystems, dropped capabilities, no-new-privileges, health probes and initial CPU/memory limits.
 

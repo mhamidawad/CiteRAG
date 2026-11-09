@@ -1,49 +1,30 @@
-# Authenticated CiteRAG REST and MCP — release gate
+# Authenticated REST and MCP
 
-**Status:** implemented and tested in isolated processes; **not deployed to production**.
+REST and streamable-HTTP MCP use a protected server-side `CITERAG_API_TOKEN` of at least 32 characters. When configured, REST protects all paths except `/api/health`; MCP protects all routes. Missing, wrong or duplicate authorization headers receive 401. Credential comparisons are constant-time. Rejections carry `Cache-Control: no-store`.
 
-## Behavior
+Use the documented `python -m citerag.web` and `python -m citerag.server` entrypoints. Startup validates non-loopback binding. Set `CITERAG_REQUIRE_AUTH=1` for authenticated loopback operation and `CITERAG_PRODUCTION=1` for production policy. Never proxy an unauthenticated development listener to a shared network. Health reports HTTP process liveness and observed configuration; it is not production certification.
 
-The REST API and streamable-HTTP MCP server accept an optional
-`CITERAG_API_TOKEN` environment variable. When set, all REST routes except
-`/api/health` and **all MCP routes** require exactly one
-`Authorization: Bearer <token>` header. Missing, incorrect or duplicate
-headers receive HTTP 401. Responses carry `Cache-Control: no-store`.
+## Single-workspace policy
 
-Server-side startup calls `validate_binding()`: a non-loopback listener
-(`0.0.0.0` or anything other than `127.0.0.1`, `::1`, `localhost`) **must**
-have a token of at least 32 characters. Setting `CITERAG_REQUIRE_AUTH=1`
-requires a token even for loopback. The standalone loopback development
-defaults remain usable without a token; never expose unauthenticated loopback
-development services via a public reverse proxy or port mapping.
+Production requires these protected server-side settings:
 
-## Credential handling
+| Setting | Meaning |
+| --- | --- |
+| `CITERAG_WORKSPACE_ID` | Safe deployment workspace identifier |
+| `CITERAG_RATE_LIMIT_PER_MINUTE` | Positive admitted-operation limit |
+| `CITERAG_GENERATION_LIMIT_PER_DAY` | Positive generation admission limit |
+| `CITERAG_POLICY_DB` | Absolute persistent SQLite policy database path |
 
-Generate a cryptographically random token with Python's `secrets` module,
-store it outside Git, and pass it using a permission-restricted secret store.
-Do **not** put it in GitHub Actions output, Docker image build arguments,
-Compose source, URL query parameters, model prompts or logs. Production
-runbooks should use external secret injection and rotation, not a committed
-`.env`. Tokens are checked with constant-time comparison.
+One deployment owns one index/workspace and credential boundary. Use separate deployments and volumes for separate tenants. The policy checks workspace headers, query fields, REST bodies and MCP tool arguments; alternate requested workspace identifiers receive 403. Omitting a workspace means the deployment's own workspace.
 
-The unauthenticated `/api/health` path provides **process liveness only**;
-it is not a readiness or security certification endpoint.
+POST answer/reindex requests and MCP tool calls consume admission budget. MCP initialization and notifications and answer polling do not consume search/generation budget. Generation admissions consume the daily allowance; retrieval-only calls do not consume that generation allowance. Counters are atomic across processes sharing the policy database. A missing/unusable policy fails closed; exhausted budgets receive 429. These are operation quotas, not actual provider billing measurements.
 
-## Isolated acceptance evidence
+## Credentials and network
 
-- Full local test suite: 100 tests passed.
-- REST temporary server: health 200, anonymous adapters 401, token-bearing
-  adapters 200 (3 adapters listed), temporary process stopped.
-- MCP temporary server: anonymous `/mcp` 401, authenticated session
-  initialized and `rag_search` listed, temporary process stopped.
-- Native OpenCode and OmniRoute AI inference **not verified** by these tests.
+Generate dedicated random credentials through an authorized issuer and keep them outside Git in owner-only files or a secret store. Do not put them in browser forms, URLs, build arguments, model prompts, logs or public reports. Verify issuer-side old-key revocation separately. Use a trusted private HTTPS boundary or reviewed TLS reverse proxy; bearer authentication alone does not encrypt transport.
 
-## Required production controls not yet certified
+## Recorded acceptance
 
-Transport encryption / trusted private network or reverse proxy; token
-provisioning and rotation; per-workspace authorization; rate limits;
-security review; bounded inference model costs; secret scanning; service
-upgrade and rollback acceptance; and actual manual GitHub Actions read-only worker preflight.
+Candidate live checks on 2026-11-08 returned anonymous protected API 401, alternate workspace 403 and correctly authorized workspace 200. Local regression tests cover budget persistence, concurrency, workspace rejection and fail-closed policy. Earlier independent MCP staging acceptance listed and called `rag_search` with bearer authentication.
 
-Do not claim complete production authorization from bearer authentication
-alone. Do not expose these endpoints publicly until the above controls pass.
+These checks do not certify multitenant isolation in a shared index or native answer relevance. Final image/source checks, credential lifecycle, secure production deployment and rollback remain release gates.

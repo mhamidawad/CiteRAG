@@ -101,3 +101,8 @@ class NativeAdapterContractTests(unittest.TestCase):
                 runner,"preflight",return_value={}), patch.object(runner.subprocess,"run",return_value=process):
                 result=runner.run("q",path/"env",path,expected_backend_id="other-backend",report_dir=path/"report2")
             self.assertEqual(result["status"],"FAIL")
+            with patch.object(runner,"env_file",return_value=path/"env"), patch.object(
+                runner,"preflight",return_value={}), patch.object(runner.subprocess,"run",return_value=process):
+                result=runner.run("q",path/"env",path,expected_backend_id="fixture-backend",report_dir=path/"report3",required_terms=["LanceDB"])
+            self.assertEqual(result["status"],"FAIL")
+            self.assertEqual(result["reason"],"AcceptanceFactsMissing")

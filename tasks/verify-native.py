@@ -12,6 +12,7 @@ from pathlib import Path
 import subprocess
 import sys
 import uuid
+import re
 import secrets
 import socket
 from urllib.parse import urlparse
@@ -96,9 +97,12 @@ def container_command(env,binary_dir,container,question,mcp_url="http://127.0.0.
        "--mount",f"type=bind,src={binary_dir},dst=/opt/opencode,readonly",
        "--entrypoint","/bin/sh",IMAGE,"-c",script,"_",question]
 
-def run(question,env_path,binary_path,mcp_url="http://127.0.0.1:48761/mcp",expected_backend_id=None,report_dir=None):
+def run(question,env_path,binary_path,mcp_url="http://127.0.0.1:48761/mcp",expected_backend_id=None,report_dir=None,required_terms=()):
+    started_at=datetime.now(timezone.utc).isoformat()
     if not isinstance(question,str) or not 1<=len(question.strip())<=400:
         raise AdmissionError("QUESTION_SCOPE_INVALID")
+    if any(not isinstance(term,str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}",term) for term in required_terms):
+        raise AdmissionError("INVALID_ACCEPTANCE_TERMS")
     env=env_file(env_path)
     snapshot=preflight()
     container="citerag-native-"+uuid.uuid4().hex[:12]
@@ -137,9 +141,12 @@ def run(question,env_path,binary_path,mcp_url="http://127.0.0.1:48761/mcp",expec
         if event.get("type")=="tool_use" and part.get("tool")=="citerag_rag_search":
             identities.extend(row.get("backend_id") for row in result_envelopes(part.get("state",{}).get("output","")))
     attested=bool(expected_backend_id and identities and all(value==expected_backend_id for value in identities))
-    ok=check["status"]=="PASS" and tool_ready and attested
-    answer={"status":"PASS" if ok else "FAIL","started_at":datetime.now(timezone.utc).isoformat(),
+    terms_verified=bool(required_terms) and all(term.casefold() in evaluated["final_answer"].casefold() for term in required_terms)
+    ok=check["status"]=="PASS" and tool_ready and attested and (not required_terms or terms_verified)
+    if required_terms and not terms_verified:failure_reason="AcceptanceFactsMissing"
+    answer={"status":"PASS" if ok else "FAIL","started_at":started_at,"completed_at":datetime.now(timezone.utc).isoformat(),
        "model":MODEL,"attempts":1,"free_local_model":True,
+       "required_acceptance_terms":list(required_terms),"acceptance_terms_verified":terms_verified,
        "resource_gate":"READY","resource_snapshot":snapshot,
        "mcp_readiness_observed":tool_ready,"container_isolated":True,
        "backend_identity_attested":attested,"backend_id":expected_backend_id,
@@ -162,10 +169,12 @@ def main():
     parser.add_argument("--expected-backend-id",default=None)
     parser.add_argument("--report-dir",type=Path,default=None)
     parser.add_argument("--certify-current",action="store_true")
+    parser.add_argument("--require-term",action="append",default=[])
     args=parser.parse_args()
     try:
         if args.binary_dir is None:raise AdmissionError("PINNED_BINARY_DIR_REQUIRED")
-        result=run(args.question,args.env_file,args.binary_dir,args.mcp_url,args.expected_backend_id,args.report_dir)
+        if args.certify_current and not args.require_term:raise AdmissionError("CERTIFICATION_ACCEPTANCE_TERMS_REQUIRED")
+        result=run(args.question,args.env_file,args.binary_dir,args.mcp_url,args.expected_backend_id,args.report_dir,args.require_term)
         if args.certify_current and result["status"]=="PASS":
             proof=ROOT/"reports/native-current-verification.json"
             proof.write_text(json.dumps(result,indent=2)+"\n")

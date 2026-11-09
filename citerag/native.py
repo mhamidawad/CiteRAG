@@ -56,6 +56,8 @@ def verification_status():
             data.get("status") == "PASS"
             and data.get("automatic_tool_selection_verified")
             and data.get("backend_identity_attested")
+            and data.get("acceptance_terms_verified")
+            and bool(data.get("required_acceptance_terms"))
             and data.get("backend_id") == os.environ.get("CITERAG_BACKEND_ID")
             and data.get("runtime_fingerprint") == runtime_fingerprint()
             and data.get("deployment_fingerprint") == deployment_fingerprint()

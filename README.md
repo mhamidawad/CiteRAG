@@ -29,9 +29,9 @@ python tasks/scan-secrets.py
 python tasks/scan-secrets.py --history
 ```
 
-Dependency versions are pinned; hash locking, image-base digest pinning and a complete dependency security review require separate acceptance. Hosted CI installs the lock from a fresh runner; full clean-host model bootstrap and end-to-end installation require their own evidence.
+Dependency versions and official wheel hashes are pinned, and the Docker base is digest-pinned. The CPU lock targets CPython 3.12 on Linux amd64. Hosted clean installation, model bootstrap, dependency/image scans and end-to-end acceptance must pass for the exact release candidate.
 
-Place approved documents under `docs/`, then run `python -m citerag.semantic ingest` for MiniLM/LanceDB/FTS5 or `python -m citerag.cli ingest` for the standard-library SQLite fallback. The document loader currently accepts Markdown/text; arbitrary source-code repository ingestion is not automatic.
+Place approved documents under `docs/`, then run `python -m citerag.semantic ingest` for MiniLM/LanceDB/FTS5 or `python -m citerag.cli ingest` for the standard-library SQLite fallback. Approved Git-tracked source code can also be ingested through the server-only CITERAG_REPOSITORY_SOURCES mapping. Browser users cannot select arbitrary host paths. See the architecture and source inventory for the allowlist and budgets.
 
 ## API and security
 
@@ -59,6 +59,6 @@ No browser form should accept provider credentials. Do not commit credentials, i
 
 ## Limitations and recovery
 
-Citations support checking an answer against retrieved material; they cannot guarantee the truth of the original source. Redaction is heuristic. Workspace permissions, quotas, browser acceptance and real generating-adapter traces need explicit release evidence.
+Citations support checking an answer against retrieved material; they cannot guarantee the truth of the original source. Redaction is heuristic. Single-workspace permissions and durable quotas are implemented; separate tenants require separate deployments and data volumes. Browser acceptance and real generating-adapter relevance still need exact release evidence.
 
 If offline model loading fails, check the approved model cache. Unsupported queries should abstain. Stop or roll back only CiteRAG's own services and preserve its private data snapshot; do not modify original OpenCode or OmniRoute services. See [architecture](docs/architecture.md), [adapters](docs/adapters.md), [Docker](docs/docker.md), [rollback](docs/rollback.md), [security](SECURITY.md) and [NOTICE](NOTICE).
