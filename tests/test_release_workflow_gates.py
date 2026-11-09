@@ -41,6 +41,9 @@ class ReleaseWorkflowGates(unittest.TestCase):
         self.assertIn("image-audit-raw.json",commands)
         self.assertIn("--vex /evidence/dhi-python-exact.vex.json",commands)
         self.assertIn("fetch-vendor-vex.py",commands)
+        self.assertIn("derive-vendor-vex.py",commands)
+        self.assertLess(commands.index("image-audit-raw.json"),commands.index("derive-vendor-vex.py"))
+        self.assertLess(commands.index("derive-vendor-vex.py"),commands.index("--vex /evidence/dhi-python-exact.vex.json"))
         self.assertTrue(any(step.get("if") == "always()" and "upload-artifact@" in step.get("uses", "") for step in steps))
 
     def test_release_actions_and_base_image_are_immutable(self):

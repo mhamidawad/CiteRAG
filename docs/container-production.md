@@ -8,7 +8,7 @@ The MCP and dashboard containers share the persistent admission database outside
 
 ## Build and scan
 
-Only GitHub Actions builds and publishes the image. The publish job requires the protected default branch, authenticates to the free Docker Hardened Images registry, verifies the reviewed signed vendor VEX pin, builds the digest-pinned Python 3.12 Debian 13 runtime, retains a raw Trivy HIGH/CRITICAL report, then enforces the exact versioned-product VEX. Python dependency advisories are audited separately. Neither an unfiltered raw scan nor a dependency audit can be substituted for the enforced image gate. The workflow preserves the release evidence artifact even when an earlier step fails.
+Only GitHub Actions builds and publishes the image. The publish job requires the protected default branch, authenticates to the free Docker Hardened Images registry, verifies the reviewed signed vendor VEX pin, builds the digest-pinned Python 3.12 Debian 13 runtime, retains a raw Trivy HIGH/CRITICAL report, then derives exact scanner PURLs only when Trivy's dpkg inventory maps the installed binary to a signed vendor versioned source product and the installed version matches. The derived OpenVEX preserves the vendor disposition and is applied by the strict Trivy gate; unmatched findings remain blocking. Python dependency advisories are audited separately. The workflow preserves the release evidence artifact even when an earlier step fails.
 
 ## Prepare a release
 
