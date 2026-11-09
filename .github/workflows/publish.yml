@@ -69,8 +69,22 @@ jobs:
           IMAGE: ghcr.io/mhamidawad/citerag:sha-${{ github.sha }}
         run: |
           mkdir -p "$RUNNER_TEMP/trivy-cache"
-          docker run --rm --network bridge             -v /var/run/docker.sock:/var/run/docker.sock             -v "$PWD/release-evidence:/evidence"             -v "$RUNNER_TEMP/trivy-cache:/root/.cache/trivy"             aquasec/trivy@sha256:6fa071ef8daa2e58b90cbf1710bedca91adbb3bf98693533226f442035b836a6             image --scanners vuln --severity HIGH,CRITICAL --exit-code 0             --timeout 10m --format json --output /evidence/image-audit-raw.json "$IMAGE"
-          docker run --rm --network bridge             -v /var/run/docker.sock:/var/run/docker.sock             -v "$PWD/release-evidence:/evidence"             -v "$RUNNER_TEMP/trivy-cache:/root/.cache/trivy"             aquasec/trivy@sha256:6fa071ef8daa2e58b90cbf1710bedca91adbb3bf98693533226f442035b836a6             image --scanners vuln --severity HIGH,CRITICAL --exit-code 1             --vex /evidence/dhi-python-exact.vex.json             --timeout 10m --format json --output /evidence/image-audit.json "$IMAGE"
+          docker run --rm --network bridge \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD/release-evidence:/evidence" \
+            -v "$RUNNER_TEMP/trivy-cache:/root/.cache/trivy" \
+            aquasec/trivy@sha256:6fa071ef8daa2e58b90cbf1710bedca91adbb3bf98693533226f442035b836a6 \
+            image --scanners vuln --severity HIGH,CRITICAL --exit-code 0 \
+            --timeout 10m --format json --output /evidence/image-audit-raw.json "$IMAGE"
+          python tasks/derive-vendor-vex.py --raw-report release-evidence/image-audit-raw.json
+          docker run --rm --network bridge \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD/release-evidence:/evidence" \
+            -v "$RUNNER_TEMP/trivy-cache:/root/.cache/trivy" \
+            aquasec/trivy@sha256:6fa071ef8daa2e58b90cbf1710bedca91adbb3bf98693533226f442035b836a6 \
+            image --scanners vuln --severity HIGH,CRITICAL --exit-code 1 \
+            --vex /evidence/dhi-python-exact.vex.json \
+            --timeout 10m --format json --output /evidence/image-audit.json "$IMAGE"
       - name: Record source and image identity
         env:
           IMAGE: ghcr.io/mhamidawad/citerag:sha-${{ github.sha }}
