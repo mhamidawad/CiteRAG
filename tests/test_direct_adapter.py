@@ -37,7 +37,7 @@ class DirectAdapterTests(unittest.TestCase):
             self.assertEqual(answer.configuration_status(), "not_configured")
 
     def test_one_real_http_stream_returns_validated_quote(self):
-        calls, transport = self.stream(QUOTE)
+        calls, transport = self.stream(ROW["text"])
         with patch.object(answer, "search", return_value=[ROW]), transport:
             result = answer._answer("Which vector database?")
         self.assertEqual(len(calls), 1)
@@ -45,6 +45,7 @@ class DirectAdapterTests(unittest.TestCase):
         self.assertEqual(json.loads(calls[0].content)["model"], answer.LOCAL_MODEL)
         self.assertTrue(result["citations_verified"] and result["claims_supported"])
         self.assertEqual(result["status"], "completed")
+        self.assertEqual(result["answer"], QUOTE)
         self.assertNotIn(ENV["CITERAG_OMNIROUTE_API_KEY"], json.dumps(result))
 
     def test_unsupported_claim_is_rejected_without_retry(self):
@@ -54,6 +55,15 @@ class DirectAdapterTests(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertEqual(result["error"], "GroundingValidationFailed")
         self.assertEqual(result["status"], "failed")
+
+    def test_model_supplied_citation_cannot_hide_unsupported_prose(self):
+        payload = ROW["text"] + "\nSource: All credentials are publicly readable docs/architecture.md\nChunk: " + "a" * 64
+        calls, transport = self.stream(payload)
+        with patch.object(answer, "search", return_value=[ROW]), transport:
+            result = answer._answer("Which database?")
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(result["status"], "failed")
+        self.assertFalse(result["claims_supported"])
 
     def test_empty_evidence_does_not_start_client_or_model(self):
         with patch.object(answer, "search", return_value=[]), patch.object(answer.httpx, "Client") as client:

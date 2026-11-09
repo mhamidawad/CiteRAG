@@ -75,10 +75,10 @@ def container_command(env,binary_dir,container,question,mcp_url="http://127.0.0.
     script=("set -eu; mkdir -p /tmp/oc-home/config/opencode; "
        "cp /opt/native-profile.json /tmp/oc-home/config/opencode/opencode.json; "
        "timeout -s TERM -k 5 15 /opt/opencode/opencode service set port "+str(port)+" 1>&2; "
-       "timeout -s TERM -k 5 25 /opt/opencode/opencode mcp list >/tmp/catalog 2>&1; "
-       "n=0; while ! grep -qi 'citerag.*connected\\|connected.*citerag' /tmp/catalog; do "
+       "timeout -s TERM -k 5 25 /opt/opencode/opencode mcp list >/tmp/catalog 2>&1 || true; "
+       "n=0; while ! grep -Eq '^[[:space:]]*✓[[:space:]]+citerag[[:space:]]+connected[[:space:]]*$' /tmp/catalog; do "
        "n=$((n+1)); if [ $n -ge 6 ]; then cat /tmp/catalog >&2; exit 72; fi; "
-       "sleep 1; timeout -s TERM -k 2 5 /opt/opencode/opencode mcp list >/tmp/catalog 2>&1; done; "
+       "sleep 1; timeout -s TERM -k 2 5 /opt/opencode/opencode mcp list >/tmp/catalog 2>&1 || true; done; "
        "cat /tmp/catalog >&2; "
        "timeout -s TERM -k 5 150 /opt/opencode/opencode run "
        "--agent citerag-answer --model omniroute/"+MODEL+" "
@@ -126,12 +126,12 @@ def run(question,env_path,binary_path,mcp_url="http://127.0.0.1:48761/mcp",expec
     clean=sanitize_trace(result.stdout)
     (report_dir/"native-trace.jsonl").write_text(clean)
     (report_dir/"native-trace.jsonl").chmod(0o600)
-    tool_ready=("citerag" in result.stderr.lower() and "connected" in result.stderr.lower())
+    tool_ready=bool(re.search(r"(?m)^\s*✓\s+citerag\s+connected\s*$",result.stderr))
     check=verify_trace(clean,exit_code=result.returncode,tool="citerag_rag_search",
                        expected_source=None)
     evaluated=evaluate(clean,result.returncode,tool_name="citerag_rag_search")
     identities=[]
-    failure_reason="NativeGroundingOrToolValidationFailed"
+    failure_reason="NativeGroundingOrToolValidationFailed" if tool_ready else "MCPNotReady"
     for line in clean.splitlines():
         try:event=json.loads(line)
         except ValueError:continue
@@ -146,7 +146,7 @@ def run(question,env_path,binary_path,mcp_url="http://127.0.0.1:48761/mcp",expec
     attested=bool(expected_backend_id and identities and all(value==expected_backend_id for value in identities))
     terms_verified=bool(required_terms) and all(term.casefold() in evaluated["final_answer"].casefold() for term in required_terms)
     ok=check["status"]=="PASS" and tool_ready and attested and (not required_terms or terms_verified)
-    if required_terms and not terms_verified:failure_reason="AcceptanceFactsMissing"
+    if required_terms and not terms_verified and check["status"]=="PASS":failure_reason="AcceptanceFactsMissing"
     answer={"status":"PASS" if ok else "FAIL","started_at":started_at,"completed_at":datetime.now(timezone.utc).isoformat(),
        "model":MODEL,"attempts":1,"free_local_model":True,"native_image_id":image_id,
        "required_acceptance_terms":list(required_terms),"acceptance_terms_verified":terms_verified,

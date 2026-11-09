@@ -86,7 +86,7 @@ class NativeAdapterContractTests(unittest.TestCase):
             {"type":"text","part":{"text":ABSTENTION}},
             {"type":"step_finish","part":{"reason":"stop"}}]
         trace = "\n".join(json.dumps(e) for e in events)
-        process = subprocess.CompletedProcess([],0,trace,"citerag connected")
+        process = subprocess.CompletedProcess([],0,trace,"✓ citerag connected")
         with tempfile.TemporaryDirectory() as directory:
             path=Path(directory)
             (path/"opencode").touch()
@@ -137,3 +137,20 @@ class NativeImageIdentityTests(unittest.TestCase):
             with patch.object(native,"native_image_id",return_value="sha256:"+"a"*64):first=native.deployment_fingerprint(**arguments)
             with patch.object(native,"native_image_id",return_value="sha256:"+"b"*64):second=native.deployment_fingerprint(**arguments)
             self.assertNotEqual(first,second)
+
+
+class NativeReadinessGuardTests(unittest.TestCase):
+    def test_initial_connection_refusal_is_bounded_before_any_model_call(self):
+        import shlex
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory);fake=path/"opencode";catalog=path/"catalog";counter=path/"counter";profile=path/"profile.json"
+            profile.write_text("{}")
+            fake.write_text("#!/bin/sh\nif [ \"$1\" = service ]; then exit 0; fi\nn=0; if [ -f "+shlex.quote(str(counter))+" ]; then n=$(cat "+shlex.quote(str(counter))+"); fi\nn=$((n+1)); echo $n > "+shlex.quote(str(counter))+"\nif [ $n -lt 3 ]; then echo 'citerag failed ECONNREFUSED'; exit 1; fi\necho '✓ citerag connected'\n")
+            fake.chmod(0o700)
+            command=runner.container_command(path/"env",path,"fixture","question",image_id="sha256:"+"a"*64)
+            script=command[command.index("-c")+1].split("timeout -s TERM -k 5 150",1)[0]
+            script=script.replace("/opt/opencode/opencode",shlex.quote(str(fake))).replace("/opt/native-profile.json",shlex.quote(str(profile))).replace("/tmp/oc-home",str(path/"home")).replace("/tmp/catalog",shlex.quote(str(catalog)))
+            result=subprocess.run(["/bin/sh","-c",script],capture_output=True,text=True,timeout=15)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertEqual(counter.read_text().strip(),"3")
+            self.assertIn("✓ citerag connected",result.stderr)

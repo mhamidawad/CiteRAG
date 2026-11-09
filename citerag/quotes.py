@@ -20,7 +20,7 @@ def evidence_quote(question,row):
     if not sentences:raise ValueError('No declarative source evidence for this question')
     wanted=support_terms(question)
     ranked=sorted(range(len(sentences)),key=lambda n:(-len(wanted & support_terms(sentences[n])),n))
-    quote='\n'.join(sentences[n] for n in sorted(ranked[:2]))
+    quote='\n'.join(sentences[n] for n in sorted(ranked[:1]))
     # Keep the exact source span but bound prompt growth in normal coding-agent catalogs.
     words=list(re.finditer(r'\S+',quote))
     return quote[:words[59].end()] if len(words)>60 else quote

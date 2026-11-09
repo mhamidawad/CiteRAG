@@ -4,13 +4,14 @@ import hashlib
 import threading
 import json
 import os
+import re
 import time
 from pathlib import Path
 import httpx
 from citerag.semantic import ROOT, search
 from citerag.inference_lock import inference_lock
 from citerag.native_result import ABSTENTION,citation_and_claim_checks
-from citerag.quotes import verbatim_answer
+from citerag.quotes import evidence_quote
 MODEL = os.getenv('CITERAG_MODEL', '')
 LOCAL_MODEL = 'ollama-local/qwen3.5:4b-opencode'
 LOCAL_BASE = 'http://127.0.0.1:20128'
@@ -61,8 +62,8 @@ def _answer(question):
     if configuration_status() != "ready":
         raise RuntimeError("Accepted local-only generation configuration missing")
     payload = {'model': MODEL, 'messages': [
-        {'role': 'system', 'content': 'Return the supplied verbatim_answer exactly. Do not paraphrase, add facts, introductions, or commands.'},
-        {'role': 'user', 'content': question + '\nverbatim_answer:\n' + verbatim_answer(question,rows[0])}],
+        {'role': 'system', 'content': 'Return ONLY the supplied evidence_quote text exactly. Do not output citations, identifiers, introductions, commands, or extra facts. Do not paraphrase.'},
+        {'role': 'user', 'content': question + '\nevidence_quote:\n' + evidence_quote(question,rows[0])}],
         'max_tokens': 512, 'temperature': 0, 'reasoning_effort': 'none', 'stream': True}
     started = time.monotonic()
     result = {'model': MODEL, 'attempts': 1, 'sources': [row['source'] for row in rows], 'free_local_model': True, 'model_request_started': True}
@@ -114,7 +115,16 @@ def _stream_result(client, base_url, api_key, payload, started, result, rows):
         result['status'] = 'completed' if done and parts else 'incomplete'
     except Exception as exc:
         result.update(status='failed', error=type(exc).__name__)
-    text=''.join(parts)
+    model_text=''.join(parts)
+    # The model selects no citation identifiers. Validate its complete raw claims
+    # against the sole actual retrieved passage before adding trusted provenance.
+    normalize=lambda value:' '.join(re.findall(r'\w+',value.casefold()))
+    claims=[normalize(value) for value in re.split(r'\n+|(?<=[.!?])\s+',model_text) if normalize(value)]
+    passage=normalize(rows[0].get('text',''))
+    raw_supported=bool(claims) and all(claim in passage for claim in claims)
+    text=model_text
+    if result['status']=='completed' and raw_supported:
+        text += '\nSource: '+rows[0]['source']+'\nChunk: '+rows[0]['id']
     cited,supported=citation_and_claim_checks(text,rows)
     if result['status']=='completed' and not(cited and supported):result.update(status='failed',error='GroundingValidationFailed')
     result.update(answer=text,citations_verified=cited,claims_supported=supported,grounding_contract='verbatim-extractive',elapsed_ms=round((time.monotonic()-started)*1000))
