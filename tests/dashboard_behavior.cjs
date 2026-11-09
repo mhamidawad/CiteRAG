@@ -84,6 +84,16 @@ function harness(overrides={}){
   assert.match(good.get('status').textContent,/Authentication required/);
   await good.get('form').onsubmit({preventDefault(){}});
   assert.equal(good.calls.filter(call=>call.url==='/api/ask').length,1);
+  const native=harness({
+    '/api/adapters':{adapters:[{name:'opencode',available:true,status:'verified'}]},
+    '/api/ask':{job_id:'native-job'},
+    '/api/jobs/native-job':{state:'completed',status:'completed',mode:'native_opencode',answer:'LanceDB source citation',sources:['docs/architecture.md'],evidence:[],elapsed_ms:100,grounding_contract:'verbatim-extractive'}
+  });
+  await native.flush();
+  native.get('agent-adapter').value='opencode';
+  await native.get('form').onsubmit({preventDefault(){}});
+  assert.equal(native.get('sources').children[0].children[0].textContent,'docs/architecture.md');
+  assert.match(native.get('sources').children[0].children[1].textContent,/Citation verified/);
   const invalid=harness({'/api/adapters':{adapters:[]}});
   await invalid.flush();
   assert.equal(invalid.get('submit').disabled,true);
@@ -93,5 +103,5 @@ function harness(overrides={}){
   await pending.get('form').onsubmit({preventDefault(){}});
   assert.match(pending.get('status').textContent,/request identifier/);
   assert.equal(pending.calls.filter(call=>call.url.startsWith('/api/jobs/')).length,0);
-  console.log('Dashboard behavior PASS: diagnostics, null context, safe export, inert source text, auth failure, no resubmission, malformed job, source inventory, reindex, invalid sources.');
+  console.log('Dashboard behavior PASS: diagnostics, null context, safe export, inert source text, auth failure, no resubmission, malformed job, source inventory, reindex, invalid sources, native citation fallback.');
 })().catch(error=>{console.error(error);process.exitCode=1});
