@@ -39,6 +39,25 @@ class ContainerReleaseTests(unittest.TestCase):
         self.assertIn("src=/safe/state,dst=/safe/state", joined)
         self.assertEqual(command[-3:], ["python", "-m", "citerag.web"])
 
+    def test_mcp_environment_keeps_public_host_allowlist_without_extra_secrets(self):
+        values = {
+            "CITERAG_API_TOKEN": "api",
+            "CITERAG_OMNIROUTE_API_KEY": "web-only",
+            "CITERAG_NATIVE_BRIDGE_TOKEN": "bridge-only",
+            "CITERAG_MCP_ALLOWED_HOSTS": "127.0.0.1:*,localhost:*,citerag.example.invalid:8443",
+            "CITERAG_MCP_ALLOWED_ORIGINS": "https://citerag.example.invalid:8443",
+            "CITERAG_NATIVE_ENV_FILE": "/safe/native.env",
+            "CITERAG_NATIVE_BINARY_DIR": "/safe/opencode",
+        }
+        mcp = deploy.runtime_environment(values, "mcp")
+        web = deploy.runtime_environment(values, "web")
+        self.assertEqual(mcp["CITERAG_MCP_ALLOWED_HOSTS"], values["CITERAG_MCP_ALLOWED_HOSTS"])
+        self.assertEqual(mcp["CITERAG_MCP_ALLOWED_ORIGINS"], values["CITERAG_MCP_ALLOWED_ORIGINS"])
+        self.assertNotIn("CITERAG_OMNIROUTE_API_KEY", mcp)
+        self.assertNotIn("CITERAG_NATIVE_BRIDGE_TOKEN", mcp)
+        self.assertNotIn("CITERAG_NATIVE_ENV_FILE", mcp)
+        self.assertIn("CITERAG_OMNIROUTE_API_KEY", web)
+
     def test_mcp_uses_same_persistent_state_without_source_writes(self):
         account = SimpleNamespace(pw_uid=1234, pw_gid=1234)
         values = {"CITERAG_MODEL_CACHE_DIR": "/safe/cache"}
