@@ -32,12 +32,15 @@ class ReleaseWorkflowGates(unittest.TestCase):
         self.assertNotIn("strategy", job)
         steps = job["steps"]
         commands = "\n".join(step.get("run", "") for step in steps)
-        login = commands.index("docker login")
+        login = commands.index("docker login ghcr.io")
         for required in ("unittest discover", "compileall", "verify-retrieval.py", "pip-audit", "--severity HIGH,CRITICAL", "--exit-code 1"):
             self.assertLess(commands.index(required), login)
         self.assertIn("--label \"org.opencontainers.image.revision=", commands)
         self.assertIn("aquasec/trivy@sha256:", commands)
         self.assertNotIn("--ignore-unfixed", commands)
+        self.assertIn("image-audit-raw.json",commands)
+        self.assertIn("--vex /evidence/dhi-python-exact.vex.json",commands)
+        self.assertIn("fetch-vendor-vex.py",commands)
         self.assertTrue(any(step.get("if") == "always()" and "upload-artifact@" in step.get("uses", "") for step in steps))
 
     def test_release_actions_and_base_image_are_immutable(self):
@@ -45,7 +48,14 @@ class ReleaseWorkflowGates(unittest.TestCase):
             if "uses" in step:
                 self.assertRegex(step["uses"], r"@[a-f0-9]{40}$")
         dockerfile = (ROOT / "Dockerfile").read_text()
-        self.assertRegex(dockerfile, r"ARG PYTHON_BASE=python:[^\s]+@sha256:[a-f0-9]{64}")
+        for variant in ("BUILD", "RUNTIME"):
+            self.assertRegex(dockerfile, rf"(?m)^ARG PYTHON_{variant}_BASE=dhi\.io/python:[^\s]+@sha256:[a-f0-9]{{64}}$")
+        self.assertIn("FROM ${PYTHON_BUILD_BASE} AS wheels", dockerfile)
+        self.assertIn("FROM ${PYTHON_RUNTIME_BASE} AS runtime", dockerfile)
+        runtime = dockerfile.split(" AS runtime", 1)[1]
+        self.assertNotRegex(runtime, r"(?m)^RUN\s")
+        self.assertIn("PYTHONPATH=/app/python-packages", runtime)
+        self.assertIn("USER 65532:65532", runtime)
 
     def test_clean_dependency_baseline_accepts_actual_model_retrieval(self):
         steps=load("tests.yml")["jobs"]["unit"]["steps"]
