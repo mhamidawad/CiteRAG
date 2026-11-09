@@ -181,12 +181,22 @@ $('form').onsubmit=async event=>{
       $('heading').textContent=job.status==='insufficient_evidence'?'Insufficient evidence':job.mode==='retrieval_only'?'Retrieved evidence':job.mode==='native_opencode'?'OpenCode answer':'Answer';
       $('answer').textContent=job.answer||'Matching source excerpts are shown below.';
       $('sources').replaceChildren();
-      for(const source of Array.isArray(job.evidence)?job.evidence:[]){
+      const evidence=Array.isArray(job.evidence)?job.evidence:[];
+      for(const source of evidence){
         const box=document.createElement('div');box.className='source';
         const title=document.createElement('strong');title.textContent=source.source;
         const id=document.createElement('p');id.className='muted';id.textContent='Chunk '+source.id;
         const text=document.createElement('pre');text.textContent=source.text;
         box.append(title,id,text);$('sources').append(box);
+      }
+      if(!evidence.length&&Array.isArray(job.sources)){
+        for(const source of job.sources){
+          if(typeof source!=='string'||!source)continue;
+          const box=document.createElement('div');box.className='source';
+          const title=document.createElement('strong');title.textContent=source;
+          const note=document.createElement('p');note.className='muted';note.textContent='Citation verified by the selected adapter.';
+          box.append(title,note);$('sources').append(box);
+        }
       }
       $('timing').textContent=(Number.isFinite(job.elapsed_ms)?(job.elapsed_ms/1000).toFixed(1)+' seconds':'Timing not reported')+' · '+(job.model||'Local semantic search')+(job.grounding_contract?' · Verbatim evidence checked':'');
       $('result').hidden=false;$('status').textContent='Complete.';
